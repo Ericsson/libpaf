@@ -1,0 +1,16 @@
+@startuml
+
+title Client Library-side Service State Diagram
+
+[*] --> Unsynced : Publish\nAPI Call
+Unsynced --> Syncing : Server Connection\nEstablished
+Unsynced --> [*] : Unpublish Protocol\nResponse
+Syncing --> Synced : Publish Protocol\nResponse
+Syncing --> Unsynced : Server Disconnect
+Synced --> Unsynced : Server Disconnect
+Synced --> Syncing : Dirty Props\n(Due to Modify\nAPI Call)
+Synced --> Unsyncing : Unpublish\nAPI Call
+Unsyncing --> Unsynced : Unpublish Protocol\nResponse
+Unsyncing --> Unsynced : Server Disconnect
+
+@enduml

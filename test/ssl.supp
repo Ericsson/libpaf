@@ -1,0 +1,6 @@
+{
+   <xcm_static_data>
+   Memcheck:Leak
+   ...
+   fun:init_ssl
+}

@@ -1,0 +1,279 @@
+#!@PYTHON@
+
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright(c) 2020 Ericsson AB
+
+import libpaf
+
+import sys
+import select
+import os
+import time
+from threading import Thread, Semaphore
+import cmd
+import fcntl
+import shlex
+import datetime
+import collections
+
+import libpaf
+
+def usage(name):
+    print("%s <domain>" % name)
+
+def props_to_str(props):
+    kvs = []
+    for key, values in props.items():
+        for value in values:
+            if isinstance(value, str_type):
+                kvs.append("'%s': '%s'" % (key, value))
+            else:
+                kvs.append("'%s': %d" % (key, value))
+    return "{%s}" % ", ".join(kvs)
+
+class MatchPrinter:
+    def __init__(self):
+        self.sub_id = None
+    def __call__(self, match_type, service_id, props=None):
+        info = [
+            "Match type: %s" % match_type.name,
+            "Service id: %x" % service_id
+        ]
+        if props != None:
+            info.append("Properties: %s" % props_to_str(props))
+        print("Subscription %x: %s" % (self.sub_id, "; ".join(info)))
+
+if sys.version_info.major == 2:
+    str_type = unicode
+    fdopen_binary_mode = ""
+else:
+    fdopen_binary_mode = "b"
+    str_type = str
+
+def _assure_attached(fun):
+    def assure_attached_wrap(self, *args, **kwargs):
+        if self.context.attached:
+            return fun(self, *args, **kwargs)
+        else:
+            self._fail("not attached")
+    return assure_attached_wrap
+
+class Worker(Thread):
+    def __init__(self, context):
+        Thread.__init__(self)
+        self.context = context
+
+        rfd, wfd = os.pipe()
+
+        flags = fcntl.fcntl(rfd, fcntl.F_GETFL)
+        fcntl.fcntl(rfd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        self.rpipe = os.fdopen(rfd, fdopen_binary_mode + "r", 0)
+        self.wpipe = os.fdopen(wfd, fdopen_binary_mode + "w", 0)
+
+        self.fun_done = Semaphore(value=0)
+    def run(self):
+        try:
+            done = False
+            while not done:
+                select.select([self.rpipe, self.context.fd()], [], [])
+                self.context.process()
+                self.run_scheduled()
+            os._exit(1)
+        except Exception as e:
+            print(str(e))
+            os._exit(1)
+    def dispatch_fun(self, fun):
+        self.fun = fun
+        self.wpipe.write(b'\0')
+        self.fun_done.acquire()
+    def run_scheduled(self):
+        try:
+            d = self.rpipe.read(1)
+            if d != None:
+                self.fun()
+                self.fun = None
+                self.fun_done.release()
+        except IOError:
+            pass
+        except Exception as e:
+            print(e)
+            os._exit(1)
+    @_assure_attached
+    def _cmd_publish(self, service_props):
+        service_id = self.context.publish(service_props)
+        print("Service Id %x." % service_id)
+        self._ok()
+    def cmd_publish(self, service_props):
+        self.dispatch_fun(lambda: self._cmd_publish(service_props))
+    @_assure_attached
+    def _cmd_unpublish(self, service_id):
+        try:
+            self.context.unpublish(service_id)
+            self._ok()
+        except libpaf.Error as e:
+            self._fail(e)
+    def cmd_unpublish(self, service_id):
+        self.dispatch_fun(lambda: self._cmd_unpublish(service_id))
+    @_assure_attached
+    def _cmd_subscribe(self, filter=None):
+        try:
+            printer = MatchPrinter()
+            sub_id = self.context.subscribe(printer, filter=filter)
+            printer.sub_id = sub_id
+            print("Subscription Id: %x" % sub_id)
+            self._ok()
+        except libpaf.Error as e:
+            self._fail(e)
+    def cmd_subscribe(self, filter=None):
+        self.dispatch_fun(lambda: self._cmd_subscribe(filter=filter))
+    @_assure_attached
+    def _cmd_unsubscribe(self, sub_id):
+        try:
+            self.context.unsubscribe(sub_id)
+            self._ok()
+        except libpaf.Error as e:
+            self._fail(e)
+    def cmd_unsubscribe(self, sub_id):
+        self.dispatch_fun(lambda: self._cmd_unsubscribe(sub_id))
+    @_assure_attached
+    def _cmd_detach(self):
+        self.context.detach()
+        while self.context.process() == 0:
+            select.select([self.context.fd()], [], [])
+        self._ok()
+    def cmd_detach(self):
+        self.dispatch_fun(lambda: self._cmd_detach())
+    def _cmd_close(self):
+    	self.context.close()
+    def cmd_close(self):
+        self.dispatch_fun(lambda: self._cmd_close())
+    def cmd_escape(self, s):
+        print(libpaf.filter_escape(s))
+        self._ok()
+    def _check_id(self, id_type, the_id):
+        if the_id < 0:
+            print("%s id must be a non-negative integer." % id_type)
+            return False
+        return True
+    def _check_service_id(self, service_id):
+        return self._check_id("Service", service_id)
+    def _check_subscription_id(self, service_id):
+        return self._check_id("Subscription", service_id)
+    def _ok(self):
+        print("OK.")
+    def _fail(self, reason):
+        if reason != None:
+            print("Operation failed: %s" % reason)
+        else:
+            print("Operation failed for unknown reasons.")
+
+def init(domain):
+    context = libpaf.attach(domain)
+    worker = Worker(context)
+    worker.start()
+    return worker
+
+def parse_props(args):
+    if len(args) % 2 != 0:
+        raise ValueError("Service properties must be key-value pairs")
+    service_props = collections.defaultdict(set)
+    for i in range(0, len(args), 2):
+        value = args[i+1]
+        if value[0] == '|' and value[-1] == '|':
+            value = value[1:-1]
+        elif value.strip() == value:
+            try:
+                value = int(value)
+            except ValueError:
+                pass
+        service_props[args[i]].add(value)
+    return service_props
+
+def parse_id(id_str):
+    try:
+        return int(id_str, 16)
+    except ValueError:
+        raise ValueError("invalid id: %s" % id_str)
+
+class LibpafCli(cmd.Cmd):
+    prompt = '> '
+    def __init__(self, worker):
+        self.worker = worker
+        cmd.Cmd.__init__(self)
+    def do_publish(self, line):
+        """publish [<prop-name> <prop-value>] ...
+        Publish a service.
+
+        In case <prop-value> is an integer in decimal format, it will
+        be added as an integer. Otherwise, the string property value type
+        will be used. To force the use of strings, use '|<integer>|'
+        (e.g. |4711|)."""
+        try:
+            args = shlex.split(line)
+            if len(args) % 2 != 0:
+                self._fail()
+                return
+            service_props = parse_props(args)
+            self.worker.cmd_publish(service_props)
+        except ValueError as e:
+            print("Unable to publish service: %s" % e)
+    def do_unpublish(self, line):
+        """unpublish <service-id>
+        Unpublish a service."""
+        try:
+            service_id = parse_id(line)
+            self.worker.cmd_unpublish(service_id)
+        except ValueError as e:
+            print("Unable to unpublish service: %s" % e)
+    def do_subscribe(self, line):
+        """subscribe [<filter-expression>]
+        Subscribe to changes in services (with optional filter expression)."""
+        try:
+            args = shlex.split(line)
+            if len(args) == 1:
+                filter=args[0]
+            else:
+                filter = None
+            self.worker.cmd_subscribe(filter=filter)
+        except ValueError as e:
+            print("%s." % e)
+        except IndexError:
+            print("Subscription filter expression is missing.")
+    def do_unsubscribe(self, line):
+        """unsubscribe <subscription-id>
+        Unsubscribe a service."""
+        try:
+            ta_id = parse_id(line)
+            self.worker.cmd_unsubscribe(ta_id)
+        except ValueError as e:
+            print(e)
+    def do_detach(self, line):
+        """unsubscribe <subscription-id>
+        Unsubscribe a service."""
+        self.worker.cmd_detach()
+    def do_quit(self, line):
+        """quit
+        Close the domain context and quit."""
+        self.worker.cmd_close()
+        return True
+    def do_escape(self, line):
+        """escape <filter-key-or-value>
+        Escape special characters in key string or value."""
+        self.worker.cmd_escape(line)
+    def emptyline(self):
+        pass
+    do_EOF = do_quit
+
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        usage(sys.argv[0])
+        sys.exit(1)
+    domain = sys.argv[1]
+
+    worker = init(domain)
+
+    cli = LibpafCli(worker)
+
+    cli.cmdloop()
+
+    os._exit(0)
