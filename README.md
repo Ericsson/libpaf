@@ -1,10 +1,12 @@
 # Pathfinder Client Library
 
-Pathfinder (or paf, for short) is a minimal name service discovery
+Pathfinder (or paf, for short) is a light-weight service discovery
 system.
 
 The Pathfinder Client Library (or libpaf, for short) is a C library
 used to access one or more Pathfinder service discovery domains.
+
+For more information, see the Pathfinder server README.
 
 ## Installation
 
@@ -32,16 +34,3 @@ source tree.
 
 To run the tests, issue:
 make check
-
-## More Information
-
-You can find more information about Pathfinder in the server git
-repository 'paf'. There are also a number of Pathfinder screencasts on
-Ericsson Play.
-
-Introduction and Overview:
-https://play.ericsson.net/media/t/0_bewz17us
-Command-line Demo:
-https://play.ericsson.net/media/t/0_z8c77wsc
-Tracing and Debugging:
-https://play.ericsson.net/media/t/0_y1h8rkgi
