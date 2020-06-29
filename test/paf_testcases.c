@@ -600,8 +600,9 @@ static void count_match_cb(enum paf_match_type match_type, int64_t service_id,
         (*hits)++;
 }
 
-static pid_t bg_publisher(const char *domain_name,
-                          const struct paf_props *props, double duration)
+static pid_t __attribute__ ((noinline))
+bg_publisher(const char *domain_name,
+	     const struct paf_props *props, double duration)
 {
     pid_t pid = fork();
 
