@@ -368,7 +368,7 @@ static struct paf_props *json_to_props(json_t *json_props, const char* log_ref)
 static void free_fields(struct proto_field *fields, void **args, size_t num_args)
 {
     size_t i;
-    for (i = 0; i < num_args; i++)
+    for (i = 0; i < num_args; i++) {
         switch (fields[i].type) {
         case proto_field_type_int64:
         case proto_field_type_number:
@@ -383,6 +383,8 @@ static void free_fields(struct proto_field *fields, void **args, size_t num_args
             assert(0);
             break;
         }
+	args[i] = NULL;
+    }
 }
 
 static int get_fields(json_t *response, struct proto_field *fields,
@@ -492,9 +494,8 @@ static int get_fields(json_t *response, struct proto_field *fields,
     return -1;
 }
 
-static enum proto_ta_state ta_consume_response(struct proto_ta *ta,
-					       enum proto_msg_type msg_type,
-					       json_t *response)
+static int ta_consume_response(struct proto_ta *ta, enum proto_msg_type msg_type,
+			       json_t *response)
 {
     struct proto_field *fields = NULL;
     struct proto_field *opt_fields = NULL;
@@ -535,15 +536,21 @@ static enum proto_ta_state ta_consume_response(struct proto_ta *ta,
 
     int num_args = get_fields(response, fields, false, ta->log_ref, args);
     if (num_args < 0)
-        goto out_free_response;
+	ta->state = proto_ta_state_failed;
+
     int num_opt_args = get_fields(response, opt_fields, true, ta->log_ref,
                                   opt_args);
     if (num_opt_args < 0)
-        goto out_free_args;
+	ta->state = proto_ta_state_failed;
 
-    enum proto_ta_state new_state = ta->state;
-    bool terminated = new_state == proto_ta_state_failed ||
-	new_state == proto_ta_state_completed;
+    int rc = 0;
+    bool terminated = false;
+    if (ta->state == proto_ta_state_failed) {
+	rc = -1;
+	msg_type = proto_msg_type_fail;
+	terminated = true;
+    } else if (ta->state == proto_ta_state_completed)
+	terminated = true;
 
     /* remove it from the list to allow callback function to clear the
        transaction list (i.e. restart the link) */
@@ -554,11 +561,10 @@ static enum proto_ta_state ta_consume_response(struct proto_ta *ta,
 	proto_ta_destroy(ta);
 
     free_fields(opt_fields, opt_args, num_opt_args);
- out_free_args:
     free_fields(fields, args, num_args);
- out_free_response:
     json_decref(response);
-    return new_state;
+
+    return rc;
 }
 
 int proto_ta_consume_response(struct proto_ta_list *ta_list,
@@ -595,9 +601,7 @@ int proto_ta_consume_response(struct proto_ta_list *ta_list,
             }
             log_ta_valid_ta(log_ref, ta->ta_id, ta->type->cmd,
 			    proto_msg_type_str(msg_type));
-            enum proto_ta_state new_state =
-		ta_consume_response(ta, msg_type, response);
-	    return new_state != proto_ta_state_failed ? 0 : -1;
+	    return ta_consume_response(ta, msg_type, response);
         }
     }
 
