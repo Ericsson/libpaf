@@ -85,7 +85,8 @@
     log_ctx_debug(ctx, "Unsubscribing to subscription id 0x%"PRIx64".", \
 		  sub_id)
 
-#define log_ctx_sd_timeout(ctx, timeout)				\
-    log_ctx_debug(ctx, "Next orphan timeout in %.1f s.", timeout)
+#define log_ctx_sd_timeout(ctx, clk_id, abs_tmo)	 \
+    log_ctx_debug(ctx, "Next orphan timeout in %.1f s.", \
+		  abs_tmo - ut_ftime(clk_id))
 
 #endif

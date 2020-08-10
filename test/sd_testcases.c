@@ -204,7 +204,7 @@ TESTCASE(sd, orphan_all_from_source)
     sd_report_match(sd, source_id1, sub_id, paf_match_type_appeared,
 		    service_id0, &service_generation, props, &ttl, NULL);
 
-    double now = ut_ftime();
+    double now = ut_ftime(CLOCK_REALTIME);
     sd_orphan_all_from_source(sd, source_id0, now);
     CHK(!sd_has_timeout(sd));
 

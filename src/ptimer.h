@@ -25,6 +25,7 @@ LIST_HEAD(tmo_list, tmo);
 
 struct ptimer
 {
+    clockid_t clk_id;
     int fd;
     struct epoll_reg epoll_reg;
     struct tmo_list tmos;
@@ -33,11 +34,11 @@ struct ptimer
     char *log_ref;
 };
 
-struct ptimer *ptimer_create(int epoll_fd, const char *log_ref);
+struct ptimer *ptimer_create(clockid_t clk_id, int epoll_fd,
+			     const char *log_ref);
 
 int64_t ptimer_install_abs(struct ptimer *timer, double abs_tmo);
 int64_t ptimer_install_rel(struct ptimer *timer, double rel_tmo);
-
 void ptimer_reinstall_rel(struct ptimer *timer, double rel_tmo,
 			  int64_t *tmo_id);
 

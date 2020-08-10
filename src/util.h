@@ -29,7 +29,7 @@ bool ut_timespec_lte(const struct timespec *a, const struct timespec *b);
 double ut_timespec_to_f(const struct timespec *ts);
 void ut_f_to_timespec(double t, struct timespec *ts);
 
-double ut_ftime(void);
+double ut_ftime(clockid_t clk_id);
 
 int64_t ut_rand_id(void);
 double ut_frand(void);

@@ -108,10 +108,10 @@ void ut_f_to_timespec(double t, struct timespec *ts)
     ts->tv_nsec = (t - ts->tv_sec) * 1e9;
 }
 
-double ut_ftime(void)
+double ut_ftime(clockid_t clk_id)
 {
     struct timespec now;
-    clock_gettime(CLOCK_REALTIME, &now);
+    clock_gettime(clk_id, &now);
     return ut_timespec_to_f(&now);
 }
 

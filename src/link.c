@@ -98,7 +98,8 @@ static void untie_from_sd(struct link *link)
 	sd_remove_listener(link->sd, link->listener);
 	link->listener = NULL;
     }
-    sd_orphan_all_from_source(link->sd, link->link_id, ut_ftime());
+    sd_orphan_all_from_source(link->sd, link->link_id,
+			      ut_ftime(CLOCK_REALTIME));
 }
 
 static void restart(struct link *link);

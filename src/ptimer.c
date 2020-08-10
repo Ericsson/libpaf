@@ -27,9 +27,10 @@ static void tmo_destroy(struct tmo *tmo)
     ut_free(tmo);
 }
 
-struct ptimer *ptimer_create(int epoll_fd, const char *log_ref)
+struct ptimer *ptimer_create(clockid_t clk_id, int epoll_fd,
+			     const char *log_ref)
 {
-    int fd = timerfd_create(CLOCK_REALTIME, TFD_NONBLOCK);
+    int fd = timerfd_create(clk_id, TFD_NONBLOCK);
 
     if (fd < 0) {
 	log_ptimer_timer_fd_creation_failed(log_ref, errno);
@@ -39,8 +40,10 @@ struct ptimer *ptimer_create(int epoll_fd, const char *log_ref)
     struct ptimer *timer = ut_malloc(sizeof(struct ptimer));
 
     *timer = (struct ptimer) {
+	.clk_id = clk_id,
 	.fd = fd,
-	.log_ref = ut_asprintf("%s timer fd: %d", log_ref, fd)
+	.log_ref = ut_asprintf("%s clk_id %d timer fd: %d", log_ref,
+			       clk_id, fd)
     };
     epoll_reg_init(&timer->epoll_reg, epoll_fd, log_ref);
     epoll_reg_add(&timer->epoll_reg, timer->fd, EPOLLIN);
@@ -54,7 +57,7 @@ struct ptimer *ptimer_create(int epoll_fd, const char *log_ref)
 
 static void set_timer_fd(struct ptimer *timer, struct itimerspec *ts)
 {
-    if (timerfd_settime(timer->fd, 0, ts, NULL) < 0) {
+    if (timerfd_settime(timer->fd, TFD_TIMER_ABSTIME, ts, NULL) < 0) {
 	log_ptimer_settime_failed(timer, errno);
 	/* resource exhaustion - best off dead */
 	abort();
@@ -101,8 +104,7 @@ static void update_epoll(struct ptimer *timer)
 	    if (tmo->expiry_time < candidate->expiry_time)
 		candidate = tmo;
 
-	double rel_tmo = candidate->expiry_time - ut_ftime();
-	arm_timer_fd(timer, rel_tmo);
+	arm_timer_fd(timer, candidate->expiry_time);
     }
 }
 
@@ -145,7 +147,7 @@ int64_t ptimer_install_rel(struct ptimer *timer, double rel_tmo)
     if (rel_tmo < 0)
 	rel_tmo = 0;
 
-    int64_t tmo_id = install_abs(timer, ut_ftime() + rel_tmo);
+    int64_t tmo_id = install_abs(timer, ut_ftime(timer->clk_id) + rel_tmo);
 
     log_ptimer_install_rel(timer, tmo_id, rel_tmo);
 
@@ -163,7 +165,7 @@ bool ptimer_has_expired(struct ptimer *timer, int64_t tmo_id)
 {
     struct tmo *tmo = LIST_FIND(&timer->tmos, id, tmo_id, entry);
 
-    double now = ut_ftime();
+    double now = ut_ftime(timer->clk_id);
 
     return now > tmo->expiry_time;
 }

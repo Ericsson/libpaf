@@ -45,7 +45,8 @@ struct paf_context
 
     struct epoll_reg epoll_reg;
 
-    struct ptimer *timer;
+    struct ptimer *mono_timer;
+    struct ptimer *rt_timer;
 
     struct sd *sd;
     int64_t sd_tmo;
@@ -102,7 +103,7 @@ static void setup_link(struct paf_context *ctx, const char *link_addr)
     int64_t link_id = get_next_link_id(ctx);
     log_ctx_link_setup(ctx, link_addr, link_id);
     struct link *link = link_create(link_id, ctx->client_id, link_addr,
-				    ctx->sd, ctx->timer,
+				    ctx->sd, ctx->mono_timer,
 				    ctx->epoll_reg.epoll_fd, ctx->log_ref);
     LIST_INSERT_HEAD(&ctx->links, link, entry);
 }
@@ -159,24 +160,24 @@ static void rescan_domain_file(struct paf_context *ctx)
 
 static void conf_rescan_tmo(struct paf_context *ctx)
 {
-    ptimer_cancel(ctx->timer, &ctx->rescan_tmo);
+    ptimer_cancel(ctx->mono_timer, &ctx->rescan_tmo);
 
     if (ctx->rescan_period > 0)
-	ctx->rescan_tmo = ptimer_install_rel(ctx->timer, ctx->rescan_period);
+	ctx->rescan_tmo =
+	    ptimer_install_rel(ctx->mono_timer, ctx->rescan_period);
 }
 
 static void conf_sd_tmo(struct paf_context *ctx)
 {
-    ptimer_cancel(ctx->timer, &ctx->sd_tmo);
+    ptimer_cancel(ctx->rt_timer, &ctx->sd_tmo);
 
     if (sd_has_timeout(ctx->sd)) {
 	double abs_tmo = sd_next_timeout(ctx->sd);
 	assert(abs_tmo >= 0);
-	double rel_tmo = abs_tmo - ut_ftime();
 
-	log_ctx_sd_timeout(ctx, rel_tmo);
+	log_ctx_sd_timeout(ctx, ctx->rt_timer->clk_id, abs_tmo);
 
-	ctx->sd_tmo = ptimer_install_rel(ctx->timer, rel_tmo);
+	ctx->sd_tmo = ptimer_install_abs(ctx->rt_timer, abs_tmo);
     }
 }
 
@@ -191,9 +192,15 @@ struct paf_context *paf_attach(const char *domain)
     if (epoll_fd < 0)
         goto err_free_log_ref;
 
-    struct ptimer *timer = ptimer_create(epoll_fd, log_ref);
-    if (timer == NULL)
+    struct ptimer *mono_timer =
+	ptimer_create(CLOCK_MONOTONIC, epoll_fd, log_ref);
+    if (mono_timer == NULL)
         goto err_close_epoll_fd;
+
+    struct ptimer *rt_timer =
+	ptimer_create(CLOCK_REALTIME, epoll_fd, log_ref);
+    if (rt_timer == NULL)
+        goto err_destroy_mono_timer;
 
     struct paf_context *ctx = ut_malloc(sizeof(struct paf_context));
 
@@ -203,7 +210,8 @@ struct paf_context *paf_attach(const char *domain)
 	.client_id = client_id,
         .domain = ctx_domain,
 	.state = ctx_state_operational,
-	.timer = timer,
+	.mono_timer = mono_timer,
+	.rt_timer = rt_timer,
         .sd = sd_create(ctx_domain),
         .sd_tmo = -1,
 	.rescan_period = ut_frandomize(conf_get_rescan_period()),
@@ -224,9 +232,11 @@ struct paf_context *paf_attach(const char *domain)
 
     return ctx;
 
- err_close_epoll_fd:
+err_destroy_mono_timer:
+    ptimer_destroy(mono_timer);
+err_close_epoll_fd:
     UT_PROTECT_ERRNO(close(epoll_fd));
- err_free_log_ref:
+err_free_log_ref:
     ut_free(log_ref);
     return NULL;
 }
@@ -267,19 +277,19 @@ int paf_process(struct paf_context *ctx)
     }
 
     if (ctx->state == ctx_state_operational) {
-	if (ptimer_has_expired(ctx->timer, ctx->rescan_tmo)) {
+	if (ptimer_has_expired(ctx->mono_timer, ctx->rescan_tmo)) {
 	    rescan_domain_file(ctx);
 	    conf_rescan_tmo(ctx);
 	}
 	conf_sd_tmo(ctx);
     } else {
-	ptimer_cancel(ctx->timer, &ctx->rescan_tmo);
-	ptimer_cancel(ctx->timer, &ctx->sd_tmo);
+	ptimer_cancel(ctx->mono_timer, &ctx->rescan_tmo);
+	ptimer_cancel(ctx->rt_timer, &ctx->sd_tmo);
     }
 
     if (ctx->state == ctx_state_operational ||
 	ctx->state == ctx_state_detaching) {
-	double now = ut_ftime();
+	double now = ut_ftime(CLOCK_REALTIME);
 	sd_process(ctx->sd, now);
     }
 
@@ -422,7 +432,8 @@ void paf_close(struct paf_context *ctx)
 	    link_destroy(link);
 	}
 
-	ptimer_destroy(ctx->timer);
+	ptimer_destroy(ctx->mono_timer);
+	ptimer_destroy(ctx->rt_timer);
 
         UT_PROTECT_ERRNO(close(ctx->epoll_reg.epoll_fd));
 

@@ -26,17 +26,18 @@
     log_debug(log_ref, "Failed to create timer fd; %d (%s).",		\
 	      create_errno, strerror(create_errno))
 
-#define log_ptimer_install(ptimer, tmo_type, tmo_id, rel_tmo)		\
+#define log_ptimer_install(ptimer, tmo_type, tmo_id, abs_tmo, rel_tmo)	\
     log_ptimer_debug(ptimer, "Installed %s timeout id %"PRId64		\
-		     " with a %.0f ms timeout.", tmo_type, tmo_id,	\
-		     rel_tmo)
+		     " expiring at %.3f (in %.3f s).", tmo_type, tmo_id, \
+		     abs_tmo, rel_tmo)
 
-#define log_ptimer_install_abs(ptimer, tmo_id, abs_tmo) \
-    log_ptimer_install(ptimer, "absolute", tmo_id,	\
-		       (abs_tmo - ut_ftime()))
+#define log_ptimer_install_abs(ptimer, tmo_id, abs_tmo)			\
+    log_ptimer_install(ptimer, "absolute", tmo_id,			\
+		       abs_tmo, (abs_tmo - ut_ftime((ptimer)->clk_id)))
 
-#define log_ptimer_install_rel(ptimer, tmo_id, rel_tmo) \
-    log_ptimer_install(ptimer, "relative", tmo_id, rel_tmo)
+#define log_ptimer_install_rel(ptimer, tmo_id, rel_tmo)			\
+    log_ptimer_install(ptimer, "relative", tmo_id,			\
+		       ut_ftime((ptimer)->clk_id) + rel_tmo, rel_tmo)
 
 #define log_ptimer_cancel(ptimer, tmo_id)				\
     log_ptimer_debug(ptimer, "Canceled timeout id %"PRId64".", tmo_id)

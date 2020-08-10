@@ -36,7 +36,7 @@ static pid_t run_server(const char *addr)
         return -1;
     else if (p == 0) {
 #ifdef PAFD_DEBUG
-        execlp("pafd", "pafd", "-s", "-l", "debug", addr, NULL);
+        execlp("pafd", "pafd", "-l", "debug", addr, NULL);
 #else
         execlp("pafd", "pafd", addr, NULL);
 #endif
@@ -209,10 +209,10 @@ static int teardown(void)
 static int wait_for_all(struct paf_context **contexts, size_t num_contexts,
                         double duration)
 {
-    double now = ut_ftime();
+    double now = ut_ftime(CLOCK_REALTIME);
     double deadline = now + duration;
 
-    for (; now < deadline; now = ut_ftime()) {
+    for (; now < deadline; now = ut_ftime(CLOCK_REALTIME)) {
         double left = deadline - now;
 
         struct pollfd pollfds[MAX_FDS];
@@ -307,12 +307,12 @@ static int wait_for_service(struct paf_context *context,
 			    double duration, int64_t service_id,
 			    const struct paf_props *props)
 {
-    double deadline = ut_ftime() + duration;
+    double deadline = ut_ftime(CLOCK_REALTIME) + duration;
     for (;;) {
 	int rc = assure_service(service_id, props);
 	if (rc == 0)
 	    return UTEST_SUCCESS;
-	if (ut_ftime() > deadline)
+	if (ut_ftime(CLOCK_REALTIME) > deadline)
 	    return UTEST_FAIL;
 	wait_for(context, 0.1);
     }
@@ -825,7 +825,7 @@ static int test_timeout(enum timeout_mode mode) {
         CHKNOERR(wait_for_all(contexts, 2, 0.1));
     } while (hits != 1);
 
-    double start = ut_ftime();
+    double start = ut_ftime(CLOCK_REALTIME);
 
     if (mode == timeout_mode_server_unavailable)
         stop_servers();
@@ -838,7 +838,7 @@ static int test_timeout(enum timeout_mode mode) {
         CHKNOERR(wait_for(sub_context, 0.01));
     } while (hits == 1);
 
-    double latency = ut_ftime() - start;
+    double latency = ut_ftime(CLOCK_REALTIME) - start;
 
     CHKINTEQ(hits, 2);
 
@@ -1224,17 +1224,17 @@ pid_t fake_server(double duration, double reconnect_min,
 	exit(EXIT_FAILURE);
 
 
-    double deadline = ut_ftime() + duration;
+    double deadline = ut_ftime(CLOCK_REALTIME) + duration;
     int i;
-    for (i = 0; ut_ftime() < deadline; i++) {
-	double period_start = ut_ftime();
+    for (i = 0; ut_ftime(CLOCK_REALTIME) < deadline; i++) {
+	double period_start = ut_ftime(CLOCK_REALTIME);
 	struct xcm_socket *client = xcm_accept(server_socket);
 	xcm_close(client);
 
 	if (i == 0)
 	    continue;
 
-	double period = ut_ftime() - period_start;
+	double period = ut_ftime(CLOCK_REALTIME) - period_start;
 
 	if (period < reconnect_min)
 	    exit(EXIT_FAILURE);
@@ -1264,8 +1264,9 @@ TESTCASE(paf, reconnect)
     
     struct paf_context *context = paf_attach(domain_name);
 
-    double deadline = ut_ftime() + duration + reconnect_max + 0.25;
-    while (ut_ftime() < deadline)
+    double deadline =
+	ut_ftime(CLOCK_REALTIME) + duration + reconnect_max + 0.25;
+    while (ut_ftime(CLOCK_REALTIME) < deadline)
 	CHKNOERR(wait_for(context, 0.1));
 
     CHKNOERR(tu_waitstatus(pid));
