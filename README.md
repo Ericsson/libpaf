@@ -1,10 +1,10 @@
 # Pathfinder Client Library
 
-Pathfinder (or paf, for short) is a light-weight service discovery
-system.
+Pathfinder is a light-weight service discovery system.
 
-The Pathfinder Client Library (or libpaf, for short) is a C library
-used to access one or more Pathfinder service discovery domains.
+The Pathfinder Client Library `libpaf` is a C library used to access
+one or more Pathfinder service discovery domains, either as a service
+producer or consumer.
 
 For more information, see the Pathfinder server README.
 
