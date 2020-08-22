@@ -5,7 +5,6 @@
 
 #include <assert.h>
 #include <string.h>
-#include <sys/eventfd.h>
 #include <time.h>
 
 #include "conf.h"
