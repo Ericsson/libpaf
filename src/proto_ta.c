@@ -56,7 +56,7 @@ static const char *proto_ta_state_str(enum proto_ta_state state)
     }
 }
 
-static const char *proto_ia_type_str(enum proto_ta_state type)
+static const char *proto_ia_type_str(enum proto_ia_type type)
 {
     switch (type) {
         SLABEL(proto_ia_type, single_response);
