@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright(c) 2020 Ericsson AB
@@ -54,7 +54,7 @@ def assure_service(conn, *args):
         props = service[2]
         ttl = service[3]
         owner = service[4]
-        is_orphan = (len(service) == 6 and service[5].has_key('orphan_since'))
+        is_orphan = (len(service) == 6 and 'orphan_since' in service[5])
         if (needle_id == None or service_id == needle_id) \
            and props == needle_props and not is_orphan:
             sys.exit(0)

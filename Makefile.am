@@ -62,11 +62,7 @@ client_LDADD = libpaf.la
 
 python_PYTHON = python/libpaf.py
 
-if PYTHON2
-PYTEST=py.test
-else
 PYTEST=py.test-3
-endif
 
 .doxygen: doc/doxygen.conf $(include_HEADERS)
 	doxygen doc/doxygen.conf && touch $@

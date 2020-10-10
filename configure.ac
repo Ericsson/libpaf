@@ -37,13 +37,7 @@ AS_IF([test "x$enable_lttng" != "xno"], [
 	             [AC_MSG_ERROR([Unable to find the lttng-ust library. Disable LTTng to avoid this dependency.])])
 ])
 
-AC_ARG_ENABLE([python2],
-    AS_HELP_STRING([--enable-python2], [use Python 2]))
-
-AS_IF([test "x$enable_python2" = "xyes"], [AM_PATH_PYTHON([2.7])],
-      [AM_PATH_PYTHON(3.5)])
-
-AM_CONDITIONAL([PYTHON2], [test "x$enable_python2" = "xyes"])
+AM_PATH_PYTHON(3.5)
 
 AC_SUBST([AM_CFLAGS])
 
