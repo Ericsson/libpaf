@@ -1,10 +1,24 @@
  -*- Autoconf -*-
 
-AC_INIT(libpaf, 0.1, [mattias.ronnblom@ericsson.com])
+m4_define([paf_major_version], [1])
+m4_define([paf_minor_version], [0])
+m4_define([paf_patch_version], [0])
+m4_define([paf_version],[paf_major_version.paf_minor_version.paf_patch_version])
+
+m4_define([paf_abi_major_version], [m4_eval(paf_major_version - 1)])
+m4_define([paf_abi_minor_version], [paf_minor_version])
+
+AC_INIT(libpaf, [paf_version], [mattias.ronnblom@ericsson.com])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_CONFIG_MACRO_DIR([m4])
 AC_PREREQ([2.63])
 AC_PROG_CC
+
+AC_SUBST([PAF_ABI_MAJOR_VERSION], [paf_abi_major_version])
+AC_SUBST([PAF_ABI_MINOR_VERSION], [paf_abi_minor_version])
+AC_SUBST([PAF_MAJOR_VERSION], [paf_major_version])
+AC_SUBST([PAF_MINOR_VERSION], [paf_minor_version])
+AC_SUBST([PAF_PATCH_VERSION], [paf_patch_version])
 
 AC_USE_SYSTEM_EXTENSIONS
 

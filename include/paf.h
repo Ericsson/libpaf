@@ -18,6 +18,11 @@ extern "C" {
  * - paf_value.h Property value.
  * - paf_err.h Error handling.
  * - paf_match.h Subscription matching.
+ *
+ * @author Mattias Rönnblom
+ * @version 0.0 [API]
+ * @version 1.0.0 [Implementation]
+ *
  */
 
 /*!

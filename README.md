@@ -41,5 +41,5 @@ API documentation in Doxygen format is available in paf.h. `make
 doxygen` will create HTML version. If the `pdflatex` tool is
 installed, a PDF version will also be produced.
 
-An online copy of the latest documentation can be found at:
-https://ericsson.github.io/libpaf/api/latest/
+An online copy of this API version's documentation can be found here:
+https://ericsson.github.io/libpaf/api/0.0/

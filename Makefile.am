@@ -17,8 +17,8 @@ bin_SCRIPTS = app/pafappc
 
 # For information on how to update these numbers, see:
 # https://www.gnu.org/software/libtool/manual/html_node/Libtool-versioning.html#Libtool-versioning
-PAF_VERSION_CURRENT=0
-PAF_VERSION_REVISION=0
+PAF_VERSION_CURRENT=@PAF_ABI_MINOR_VERSION@
+PAF_VERSION_REVISION=@PAF_PATCH_VERSION@
 PAF_VERSION_AGE=$(PAF_VERSION_CURRENT)
 
 libpaf_la_SOURCES = src/util.c src/epoll_reg.c src/ptimer.c src/log.c \
@@ -90,6 +90,13 @@ distclean-local:
 		common/config.h.in
 	find . -name \*~ -print0 | xargs -0 rm -f
 
+verify-versions: all
+	./test/verify_versions.py $(srcdir)/include/paf.h \
+		$(srcdir)/README.md $(builddir) \
+		@PAF_ABI_MAJOR_VERSION@ @PAF_ABI_MINOR_VERSION@ \
+		@PAF_MAJOR_VERSION@ @PAF_MINOR_VERSION@ \
+		@PAF_PATCH_VERSION@
+
 paftest-run: paftest
 	./paftest -c $(TESTS)
 
@@ -105,7 +112,7 @@ paftest-run-valgrind: paftest
 		--suppressions=test/lttng.supp \
 		--num-callers=20 ./paftest -v -c $(TESTS)
 
-BASIC_TEST_TARGETS=paftest-run
+BASIC_TEST_TARGETS=verify-versions paftest-run
 
 if VALGRIND
 TEST_TARGETS=paftest-run-valgrind $(BASIC_TEST_TARGETS)
