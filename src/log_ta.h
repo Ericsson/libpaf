@@ -8,8 +8,9 @@
 
 #include "log.h"
 
-#define log_ta_invalid_json(log_ref)		\
-    log_debug(log_ref, "Error parsning JSON.")
+#define log_ta_invalid_json(log_ref, json_err)			\
+    log_debug(log_ref, "Error parsing JSON at (%d, %d): %s.",	\
+	      (json_err)->line, (json_err)->column, (json_err)->text)
 
 #define log_ta_missing_field(log_ref, field)				\
     log_debug(log_ref, "Response message is missing the required "	\

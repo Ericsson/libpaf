@@ -58,7 +58,7 @@
 		   state_str)
 
 #define log_link_state_change(link, from_state, to_state)	\
-    log_link_debug(link, "Transition between state %s to %s.", \
+    log_link_debug(link, "Transition from state %s to %s.", \
 		   from_state, to_state)
     
 #define log_link_ongoing_ta(link, count)				\

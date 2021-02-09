@@ -494,40 +494,35 @@ static int get_fields(json_t *response, struct proto_field *fields,
     return -1;
 }
 
-static int ta_consume_response(struct proto_ta *ta, enum proto_msg_type msg_type,
-			       json_t *response)
+static int ta_consume_response(struct proto_ta *ta,
+			       enum proto_msg_type msg_type, json_t *response)
 {
     struct proto_field *fields = NULL;
     struct proto_field *opt_fields = NULL;
 
-    if (response != NULL) {
-	if (msg_type == proto_msg_type_accept &&
-	    ta->state == proto_ta_state_requesting &&
-	    ta->type->ia_type == proto_ia_type_multi_response) {
-	    ta->state = proto_ta_state_accepted;
-	} else if (msg_type == proto_msg_type_notify &&
-		   ta->state == proto_ta_state_accepted) {
-	    fields = ta->type->notify_fields;
-	    opt_fields = ta->type->opt_notify_fields;
-	} else if (msg_type == proto_msg_type_complete &&
-		   ((ta->state == proto_ta_state_requesting &&
-		     ta->type->ia_type == proto_ia_type_single_response) ||
-		    (ta->state == proto_ta_state_accepted &&
-		     ta->type->ia_type == proto_ia_type_multi_response))) {
-	    fields = ta->type->complete_fields;
-	    ta->state = proto_ta_state_completed;
-	} else if (msg_type == proto_msg_type_fail) {
-	    ta->state = proto_ta_state_failed;
-	    opt_fields = ta->type->opt_fail_fields;
-	} else {
-	    log_ta_invalid_state(ta->log_ref, ta->ta_id,
-				 proto_msg_type_str(msg_type),
-				 proto_ia_type_str(ta->type->ia_type),
-				 proto_ta_state_str(ta->state));
-	    ta->state = proto_ta_state_failed;
-	}
+    if (msg_type == proto_msg_type_accept &&
+	ta->state == proto_ta_state_requesting &&
+	ta->type->ia_type == proto_ia_type_multi_response) {
+	ta->state = proto_ta_state_accepted;
+    } else if (msg_type == proto_msg_type_notify &&
+	       ta->state == proto_ta_state_accepted) {
+	fields = ta->type->notify_fields;
+	opt_fields = ta->type->opt_notify_fields;
+    } else if (msg_type == proto_msg_type_complete &&
+	       ((ta->state == proto_ta_state_requesting &&
+		 ta->type->ia_type == proto_ia_type_single_response) ||
+		(ta->state == proto_ta_state_accepted &&
+		 ta->type->ia_type == proto_ia_type_multi_response))) {
+	fields = ta->type->complete_fields;
+	ta->state = proto_ta_state_completed;
+    } else if (msg_type == proto_msg_type_fail) {
+	ta->state = proto_ta_state_failed;
+	opt_fields = ta->type->opt_fail_fields;
     } else {
-        log_ta_invalid_json(ta->log_ref);
+	log_ta_invalid_state(ta->log_ref, ta->ta_id,
+			     proto_msg_type_str(msg_type),
+			     proto_ia_type_str(ta->type->ia_type),
+			     proto_ta_state_str(ta->state));
 	ta->state = proto_ta_state_failed;
     }
 
@@ -570,11 +565,12 @@ static int ta_consume_response(struct proto_ta *ta, enum proto_msg_type msg_type
 int proto_ta_consume_response(struct proto_ta_list *ta_list,
                               struct msg *response_msg, const char *log_ref)
 {
-    json_t *response = json_loads(response_msg->data, 0, NULL);
+    json_error_t json_err;
+    json_t *response = json_loads(response_msg->data, 0, &json_err);
     msg_free(response_msg);
 
     if (response == NULL) {
-        log_ta_invalid_json(log_ref);
+        log_ta_invalid_json(log_ref, &json_err);
 	goto err;
     }
 
