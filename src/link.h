@@ -70,7 +70,6 @@ struct link
     double reconnect_time;
 
     struct xcm_socket *conn;
-    int64_t xcm_tmo;
 
     int64_t detached_tmo;
 

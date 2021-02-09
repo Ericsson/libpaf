@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2020 Ericsson AB
+ * Copyright(c) 2020-2021 Ericsson AB
  */
 
 #include <assert.h>
@@ -61,7 +61,6 @@ static void set_state(struct link *link, enum link_state state)
 static void clear_tmos(struct link *link)
 {
     ptimer_cancel(link->timer, &link->reconnect_tmo);
-    ptimer_cancel(link->timer, &link->xcm_tmo);
     ptimer_cancel(link->timer, &link->detached_tmo);
 }
 
@@ -70,16 +69,22 @@ static int64_t get_next_ta_id(struct link *link)
     return link->next_ta_id++;
 }
 
-static void rereg_xcm(struct link *link);
+static void await(struct xcm_socket *conn, int condition)
+{
+    UT_SAVE_ERRNO;
+    int rc = xcm_await(conn, condition);
+    UT_RESTORE_ERRNO_DC;
+    assert(rc >= 0);
+}
 
 static void queue_request(struct link *link, struct msg *request)
 {
-    bool needs_rereg = TAILQ_EMPTY(&link->out_queue);
+    bool was_empty = TAILQ_EMPTY(&link->out_queue);
 
     TAILQ_INSERT_TAIL(&link->out_queue, request, entry);
 
-    if (needs_rereg)
-	rereg_xcm(link);
+    if (was_empty)
+	await(link->conn, XCM_SO_SENDABLE|XCM_SO_RECEIVABLE);
 }
 
 static void clear_queue(struct link *link)
@@ -115,8 +120,10 @@ static void try_flush_queue(struct link *link)
         UT_RESTORE_ERRNO(send_errno);
 
         if (rc < 0) {
-            if (send_errno != EAGAIN)
+            if (send_errno != EAGAIN) {
                 restart(link);
+		return;
+	    }
 	    break;
         }
 
@@ -127,7 +134,8 @@ static void try_flush_queue(struct link *link)
         msg_free(out_msg);
     }
 
-    rereg_xcm(link);
+    if (TAILQ_EMPTY(&link->out_queue))
+	await(link->conn, XCM_SO_RECEIVABLE);
 }
 
 static void clear_tas(struct link *link)
@@ -136,58 +144,6 @@ static void clear_tas(struct link *link)
     while ((ta = LIST_FIRST(&link->transactions)) != NULL) {
         LIST_REMOVE(ta, entry);
         proto_ta_destroy(ta);
-    }
-}
-
-static int translate_event(int xcm_event)
-{
-    int epoll_event = 0;
-    if (xcm_event & XCM_FD_READABLE)
-        epoll_event |= EPOLLIN;
-    if (xcm_event & XCM_FD_WRITABLE)
-        epoll_event |= EPOLLOUT;
-    return epoll_event;
-}
-
-#define XCM_MAX_FDS (8)
-
-static void rereg_xcm(struct link *link)
-{
-    epoll_reg_reset(&link->epoll_reg);
-
-    switch(link->state) {
-    case link_state_connecting:
-	break;
-    case link_state_greeting:
-    case link_state_operational:
-    case link_state_detaching: {
-        int condition = XCM_SO_RECEIVABLE;
-        if (!TAILQ_EMPTY(&link->out_queue))
-            condition |= XCM_SO_SENDABLE;
-        int fds[XCM_MAX_FDS];
-        int events[XCM_MAX_FDS];
-
-        UT_SAVE_ERRNO;
-        int rc = xcm_want(link->conn, condition, fds, events, XCM_MAX_FDS);
-        UT_RESTORE_ERRNO_DC;
-
-        assert(rc >= 0);
-
-        if (rc == 0)
-	    ptimer_reinstall_rel(link->timer, 0, &link->xcm_tmo);
-	else {
-	    ptimer_cancel(link->timer, &link->xcm_tmo);
-            int i;
-            for (i = 0; i < rc; i++)
-                epoll_reg_add(&link->epoll_reg, fds[i],
-                              translate_event(events[i]));
-        }
-        break;
-    }
-    case link_state_detached:
-        break;
-    default:
-	assert(0);
     }
 }
 
@@ -745,7 +701,6 @@ struct link *link_create(int64_t link_id, int64_t client_id,
 	.sd = sd,
         .timer = timer,
 	.reconnect_tmo = -1,
-	.xcm_tmo = -1,
 	.detached_tmo = -1,
 	.log_ref = link_log_ref
     };
@@ -763,8 +718,6 @@ struct link *link_create(int64_t link_id, int64_t client_id,
     link->state = link_state_connecting;
 
     link->reconnect_tmo = ptimer_install_rel(link->timer, 0);
-
-    rereg_xcm(link);
 
     return link;
 }
@@ -807,8 +760,6 @@ static void restart(struct link *link)
     set_state(link, link_state_connecting);
 
     reinstall_reconnect_tmo(link);
-
-    rereg_xcm(link);
 }
 
 static void try_connect(struct link *link)
@@ -831,6 +782,8 @@ static void try_connect(struct link *link)
     }
 
     log_link_xcm_connected(link, link->domain_addr, xcm_local_addr(link->conn));
+
+    epoll_reg_add(&link->epoll_reg, xcm_fd(link->conn), EPOLLIN);
 
     ptimer_cancel(link->timer, &link->reconnect_tmo);
 
@@ -882,8 +835,6 @@ int link_process(struct link *link)
     if (link->state == link_state_detached)
         rc = LINK_ERR_DETACHED;
 
-    rereg_xcm(link);
-
     return rc;
 }
 
@@ -901,8 +852,6 @@ void link_detach(struct link *link)
         link->state = link_state_detached;
 	ptimer_reinstall_rel(link->timer, 0, &link->detached_tmo);
     }
-
-    rereg_xcm(link);
 }
 
 void link_destroy(struct link *link)
