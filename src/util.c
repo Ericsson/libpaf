@@ -80,7 +80,7 @@ char *ut_asprintf(const char *fmt, ...)
 
     int rc = vasprintf(&str, fmt, ap);
     if (rc < 0)
-	log_ut_alloc_failure();
+	alloc_failure();
 
     va_end(ap);
 
