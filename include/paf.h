@@ -23,6 +23,73 @@ extern "C" {
  * @version 0.0 [API]
  * @version 1.0.0 [Implementation]
  *
+ * @section overview Overview
+ *
+ * The Pathfinder Client Library API is used to access one or more
+ * Pathfinder service discovery domains, either as a service producer
+ * or consumer.
+ *
+ * All the functions in this API are non-blocking in the sense that no
+ * blocking system calls are made.
+ *
+ * @section domains Service Discovery Domains
+ *
+ * A Pathfinder service discovery domain is a namespace shared by all
+ * Pathfinder clients attached to that domain. A service publish by
+ * one client can be seen by all other clients attached to that
+ * domain. A domain is served by one or more Pathfinder server
+ * instances.
+ *
+ * In order to connect to a domain, an application issues paf_attach()
+ * with the appropriate service discovery domain name. It need not
+ * know what servers are currently serving that domain.
+ *
+ * @subsection domain_mapping Domain Mapping
+ *
+ * The mapping between a service discovery domain name and the set of
+ * addresses to the Pathfinder servers serving this domain is kept in
+ * a file. The configuration for a particular domain name must be
+ * stored in a file with the same name as the domain, and be located
+ * in the domain files directory.  The compile-time default location
+ * is is @c /run/paf/domains.d/. The contents of the file is a
+ * newline-separated list of XCM addresses. The directory may contain
+ * an arbitrary amount of domains.
+ *
+ * In case the file does not exist at the time of the paf_attach()
+ * call, the library will periodically check if it has been created.
+ *
+ * In case the file is modified (e.g., a server is added, removed or
+ * has its address changed), it will be re-read by the library. If the
+ * file is removed, the set of servers is considered empty.
+ *
+ * The environment variable @c PAF_DOMAINS may set in case a
+ * non-standard directory is preferred over the default.
+ *
+ * @section thread_safety Multi-thread Safety
+ *
+ * All API calls are multi-thread (MT) safe when called on different
+ * context (for paf.h API calls) or service properties (for
+ * paf_props.h API calls). Thus, one thread may safely call
+ * paf_publish(), while another thread calls the same (or a different)
+ * paf_*() function, but on another context.
+ *
+ * No API calls are MT safe when called on the same context or service
+ * properties. For that to work, external synchronization (e.g., a
+ * mutex lock) is required.
+ *
+ * @section tracing Tracing
+ *
+ * The Pathfinder Client Library comes with built-in support for
+ * tracing. The library supports writing traces to stderr in
+ * human-readable format, or direct them to LTTng. The former is
+ * always available, and the latter is available if the library is
+ * built with LTTng support.
+ *
+ * To enable stderr-type tracing, set the @c PAF_DEBUG environment
+ * variable to "1", before starting the application.
+ *
+ * To enabled LTTng tracing, enable the relevant libpaf LTTng
+ * tracepoints.
  */
 
 /*!
