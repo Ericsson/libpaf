@@ -46,6 +46,7 @@ TESTCASE(filter, validate_comparison)
     CHK(filter_is_valid("(bar>-4)"));
 
     CHK(!filter_is_valid("(foo>)"));
+    CHK(!filter_is_valid("(foo>"));
     CHK(!filter_is_valid("(foo> 9)"));
     CHK(!filter_is_valid("(foo<9 )"));
     CHK(!filter_is_valid("(foo<9a)"));

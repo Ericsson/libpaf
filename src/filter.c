@@ -106,7 +106,7 @@ static ssize_t parse_str_or_int(struct input *input, bool *is_int_p)
     for (;;) {
         int in_c = input_current(input);
         if (in_c < 0)
-            return false;
+            return -1;
 
         bool special = strchr(SPECIAL_CHARS, (char)in_c) != NULL;
 
@@ -186,7 +186,7 @@ static int parse_greater_and_less_than(struct input *input, char op)
     bool is_int;
     ssize_t value_len = parse_str_or_int(input, &is_int);
 
-    if (!is_int || value_len == 0)
+    if (value_len <= 0 || !is_int)
         return -1;
 
     return 0;
