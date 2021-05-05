@@ -27,20 +27,27 @@
 #define log_ctx_detaching(ctx)				\
     log_ctx_debug(ctx, "Detaching from domain.")
 
-#define log_ctx_domain_file_error(ctx, op_errno)		\
-    log_ctx_debug(ctx, "Error accessing domain file: %d (%s).", \
-		  op_errno, strerror(op_errno))
+#define log_ctx_link_setup(ctx, server, link_id)			\
+    do {                                                                \
+	char buf[1024];							\
+	buf[0] = '\0';							\
+	log_aprintf(buf, sizeof(buf), "Setting up link id %d with domain " \
+		    "address %s.", link_id, (server)->addr);		\
+	if (server->cert_file != NULL)					\
+	    log_aprintf(buf, sizeof(buf), " Certificate file: \"%s\".",	\
+			server->cert_file);				\
+	if (server->key_file != NULL)					\
+	    log_aprintf(buf, sizeof(buf), " Key file: \"%s\".",		\
+			server->key_file);				\
+	if (server->tc_file != NULL)					\
+	    log_aprintf(buf, sizeof(buf), " Trusted CA file: \"%s\".",	\
+			server->tc_file);				\
+	log_ctx_debug(ctx, buf);					\
+    } while (0)
 
-#define log_ctx_domain_file_unchanged(ctx)		\
-    log_ctx_debug(ctx, "Domain file unchanged.")
-
-#define log_ctx_link_setup(ctx, link_addr, link_id)			\
-    log_ctx_debug(ctx, "Setting up link id %d with domain address %s.", \
-		  link_id, link_addr)
-
-#define log_ctx_link_teardown(ctx, link_addr, link_id)		\
+#define log_ctx_link_teardown(ctx, server, link_id)			\
     log_ctx_debug(ctx, "Tearing down link id %d with domain address %s.", \
-		  link_id, link_addr)
+		  link_id, (server)->addr)
 
 #define log_ctx_processing(link, state_str)	\
     log_ctx_debug(link, "Processing context in state %s.", state_str)

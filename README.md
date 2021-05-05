@@ -10,9 +10,16 @@ For more information, see the Pathfinder server README.
 
 ## Installation
 
-The Pathfinder Client Library is implemented in C. Its runtime and
-build-time dependencies are libjansson and libxcm (API/ABI version
-0.13 or later). Autotools is a build-time dependency.
+The Pathfinder Client Library is implemented in C.
+
+Dependencies:
+
+* libjansson
+* libxcm (API/ABI version 0.13 or higher)
+* Automake
+
+For per-server TLS certificate configuration support, XCM API/ABI
+version 0.16 or later is required.
 
 To build and install libpaf, run:
 

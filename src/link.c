@@ -683,7 +683,7 @@ static void sd_changed_cb(enum sd_obj_type obj_type, int64_t obj_id,
 }
 
 struct link *link_create(int64_t link_id, int64_t client_id,
-			 const char *domain_addr,
+			 const struct server_conf *server,
 			 struct sd *sd, struct ptimer *timer,
 			 int epoll_fd, const char *log_ref)
 {
@@ -696,7 +696,7 @@ struct link *link_create(int64_t link_id, int64_t client_id,
     *link = (struct link) {
 	.link_id = link_id,
 	.client_id = client_id,
-	.domain_addr = ut_strdup(domain_addr),
+	.server = server_conf_clone(server),
 	.state = link_state_detached,
 	.sd = sd,
         .timer = timer,
@@ -737,7 +737,7 @@ static void reinstall_reconnect_tmo(struct link *link)
 	link->reconnect_time = reconnect_max;
     if (link->reconnect_time < reconnect_min)
 	link->reconnect_time = reconnect_min;
-    
+
     ptimer_reinstall_rel(link->timer, link->reconnect_time,
 			 &link->reconnect_tmo);
 }
@@ -762,6 +762,16 @@ static void restart(struct link *link)
     reinstall_reconnect_tmo(link);
 }
 
+#ifdef HAVE_XCM_WRITABLE_ATTRS
+static void add_non_null(struct xcm_attr_map *attrs,
+			 const char *attr_name,
+			 const char *attr_value)
+{
+    if (attr_value != NULL)
+	xcm_attr_map_add_str(attrs, attr_name, attr_value);
+}
+#endif
+
 static void try_connect(struct link *link)
 {
     /* don't spam the server even though link_process() is being
@@ -772,16 +782,36 @@ static void try_connect(struct link *link)
     ptimer_ack(link->timer, &link->reconnect_tmo);
 
     UT_SAVE_ERRNO;
-    link->conn = xcm_connect(link->domain_addr, XCM_NONBLOCK);
+#ifdef HAVE_XCM_WRITABLE_ATTRS
+    struct xcm_attr_map *attrs = xcm_attr_map_create();
+
+    xcm_attr_map_add_bool(attrs, "xcm.blocking", false);
+    add_non_null(attrs, "tls.cert_file", link->server->cert_file);
+    add_non_null(attrs, "tls.key_file", link->server->key_file);
+    add_non_null(attrs, "tls.tc_file", link->server->tc_file);
+
+    link->conn = xcm_connect_a(link->server->addr, attrs);
+
+    xcm_attr_map_destroy(attrs);
+#else
+    if (link->server->cert_file != NULL ||
+	link->server->key_file != NULL ||
+	link->server->tc_file != NULL) {
+	log_link_tls_conf_old_xcm(link);
+	errno = EINVAL;
+    } else
+	link->conn = xcm_connect(link->server->addr, XCM_NONBLOCK);
+#endif
     UT_RESTORE_ERRNO(connect_errno);
 
     if (link->conn == NULL) {
-        log_link_xcm_connect_failed(link, link->domain_addr, connect_errno);
+        log_link_xcm_connect_failed(link, link->server->addr, connect_errno);
 	reinstall_reconnect_tmo(link);
 	return;
     }
 
-    log_link_xcm_connected(link, link->domain_addr, xcm_local_addr(link->conn));
+    log_link_xcm_connected(link, link->server->addr,
+			   xcm_local_addr(link->conn));
 
     epoll_reg_add(&link->epoll_reg, xcm_fd(link->conn), EPOLLIN);
 
@@ -867,7 +897,7 @@ void link_destroy(struct link *link)
 	clear(link);
         log_link_destroy(link);
 	ut_free(link->log_ref);
-	ut_free(link->domain_addr);
+	server_conf_destroy(link->server);
         ut_free(link);
     }
 }

@@ -1,0 +1,58 @@
+base-path: test/cert
+
+certs:
+  client-root:
+    subject_name: client-root
+    ca: True
+  client:
+    subject_name: client
+    issuer: client-root
+
+  untrusted-client-root:
+    subject_name: untrusted-client-root
+    ca: True
+  untrusted-client:
+    subject_name: untrusted-client
+    issuer: untrusted-client-root
+
+  server-root:
+    subject_name: server-root
+    ca: True
+  server:
+    subject_name: localhost
+    issuer: server-root
+
+files:
+  - type: cert
+    id: client
+    path: client/cert.pem
+  - type: key
+    id: client
+    path: client/key.pem
+  - type: bundle
+    certs:
+      - server-root
+    paths:
+      - client/tc.pem
+
+  - type: cert
+    id: untrusted-client
+    path: untrusted_client/cert.pem
+  - type: key
+    id: untrusted-client
+    path: untrusted_client/key.pem
+  - type: bundle
+    certs:
+      - server-root
+    path: untrusted-client/tc.pem
+
+  - type: cert
+    id: server
+    path: server/cert.pem
+  - type: key
+    id: server
+    path: server/key.pem
+  - type: bundle
+    certs:
+      - client-root
+    path: server/tc.pem

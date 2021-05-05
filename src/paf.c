@@ -16,7 +16,7 @@
 #include <paf_err.h>
 
 #include "conf.h"
-#include "domain_file.h"
+#include "domain_conf.h"
 #include "epoll_reg.h"
 #include "filter.h"
 #include "link.h"
@@ -76,20 +76,16 @@ static const char *ctx_state_str(enum ctx_state state)
     }
 }
 
-static bool str_eq(const char *a, const char *b)
+static struct link *get_link(struct paf_context *ctx,
+			     const struct server_conf *server)
 {
-    return strcmp(a, b) == 0;
+    return LIST_FIND_FUN(&ctx->links, server, server, entry,
+			 server_conf_equals);
 }
 
-static struct link *get_link(struct paf_context *ctx, const char *link_addr)
+static bool has_link(struct paf_context *ctx, const struct server_conf *server)
 {
-    return LIST_FIND_FUN(&ctx->links, domain_addr, link_addr, entry,
-			 str_eq);
-}
-
-static bool has_link(struct paf_context *ctx, const char *link_addr)
-{
-    return get_link(ctx, link_addr) != NULL;
+    return get_link(ctx, server) != NULL;
 }
 
 static int64_t get_next_link_id(struct paf_context *ctx)
@@ -97,11 +93,12 @@ static int64_t get_next_link_id(struct paf_context *ctx)
     return ctx->next_link_id++;
 }
 
-static void setup_link(struct paf_context *ctx, const char *link_addr)
+static void setup_link(struct paf_context *ctx,
+		       const struct server_conf *server)
 {
     int64_t link_id = get_next_link_id(ctx);
-    log_ctx_link_setup(ctx, link_addr, link_id);
-    struct link *link = link_create(link_id, ctx->client_id, link_addr,
+    log_ctx_link_setup(ctx, server, link_id);
+    struct link *link = link_create(link_id, ctx->client_id, server,
 				    ctx->sd, ctx->mono_timer,
 				    ctx->epoll_reg.epoll_fd, ctx->log_ref);
     LIST_INSERT_HEAD(&ctx->links, link, entry);
@@ -109,52 +106,41 @@ static void setup_link(struct paf_context *ctx, const char *link_addr)
 
 static void teardown_link(struct paf_context *ctx, struct link *link)
 {
-    log_ctx_link_teardown(ctx, link->domain_addr, link->link_id);
+    log_ctx_link_teardown(ctx, link->server, link->link_id);
     LIST_REMOVE(link, entry);
     link_destroy(link);
 }
 
-static void teardown_link_by_addr(struct paf_context *ctx,
-				  const char *link_addr)
-{
-    struct link *link = get_link(ctx, link_addr);
-    teardown_link(ctx, link);
-}
-
 static void rescan_domain_file(struct paf_context *ctx)
 {
-    char **addrs = NULL;
-
     UT_SAVE_ERRNO;
-    ssize_t addrs_len =
-	domain_file_get_addrs(ctx->domain, &ctx->domain_file_mtime, &addrs);
-    UT_RESTORE_ERRNO(get_errno);
+    struct domain_conf *conf = 
+	domain_conf_read(ctx->domain, &ctx->domain_file_mtime, ctx->log_ref);
+    UT_RESTORE_ERRNO_DC;
 
-    if (addrs_len < 0) {
-	if (get_errno != 0)
-	    log_ctx_domain_file_error(ctx, get_errno);
-	else
-	    log_ctx_domain_file_unchanged(ctx);
+    if (conf == NULL)
 	return;
-    }
 
-    /* create links added to the domains file */
-    ssize_t i;
-    for (i = 0; i < addrs_len; i++) {
-	if (!has_link(ctx, addrs[i]))
-	    setup_link(ctx, addrs[i]);
-    }
-
-    /* destroy links removed from the domains file */
+    /* destroy links removed from the domains file, or for which the
+       configuration has changed */
     struct link *link = LIST_FIRST(&ctx->links);
     while (link != NULL) {
 	struct link *next = LIST_NEXT(link, entry);
-	if (!ut_str_ary_has(addrs, addrs_len, link->domain_addr))
-	    teardown_link_by_addr(ctx, link->domain_addr);
+	if (!domain_conf_has_server(conf, link->server))
+	    teardown_link(ctx, link);
 	link = next;
     }
 
-    domain_file_free_addrs(addrs, addrs_len);
+    /* create links added to the domains file, or for which the
+       configuration has changed */
+    ssize_t i;
+    for (i = 0; i < conf->num_servers; i++) {
+	const struct server_conf *server = conf->servers[i];
+	if (!has_link(ctx, server))
+	    setup_link(ctx, server);
+    }
+
+    domain_conf_destroy(conf);
 }
 
 static void conf_rescan_tmo(struct paf_context *ctx)

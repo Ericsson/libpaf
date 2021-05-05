@@ -24,7 +24,7 @@ PAF_VERSION_AGE=$(PAF_VERSION_CURRENT)
 libpaf_la_SOURCES = src/util.c src/epoll_reg.c src/ptimer.c src/log.c \
 	src/service.c src/match.c src/sub.c src/sd.c src/proto_ta.c \
 	src/msg.c src/paf_value.c src/paf_props.c src/filter.c src/err.c \
-	src/conf.c src/link.c src/domain_file.c src/paf.c
+	src/conf.c src/link.c src/server_conf.c src/domain_conf.c src/paf.c
 
 libpaf_la_LDFLAGS = -Wl,--version-script=$(srcdir)/src/libpaf.vs \
 	-version-info $(PAF_VERSION_CURRENT):$(PAF_VERSION_REVISION):$(PAF_VERSION_AGE)
@@ -41,7 +41,7 @@ TEST_CPPFLAGS=-I$(srcdir)/test -I$(srcdir)/test/utest -I$(srcdir)/src
 
 PAFTEST_TESTCASE_SOURCES = test/value_testcases.c test/props_testcases.c \
 	test/filter_testcases.c test/service_testcases.c \
-	test/sub_testcases.c test/sd_testcases.c test/domain_file_testcases.c \
+	test/sub_testcases.c test/sd_testcases.c test/domain_conf_testcases.c \
 	test/paf_testcases.c
 
 # These functions are included in the shared object, but their symbols
@@ -49,7 +49,7 @@ PAFTEST_TESTCASE_SOURCES = test/value_testcases.c test/props_testcases.c \
 # program
 PAFTEST_UNITTEST_SOURCES = src/sub.c src/filter.c src/log.c \
 	src/match.c src/service.c src/sd.c src/paf_props.c src/paf_value.c \
-	src/domain_file.c src/conf.c
+	src/server_conf.c src/domain_conf.c src/conf.c
 paftest_SOURCES = $(PAFTEST_TESTCASE_SOURCES) $(UTEST_SOURCES) \
 	src/util.c test/testutil.c $(PAFTEST_UNITTEST_SOURCES)
 paftest_CPPFLAGS=$(AM_CPPFLAGS) $(TEST_CPPFLAGS)
@@ -70,14 +70,14 @@ if PDFLATEX
 	make -C doc/latex && mv doc/latex/refman.pdf doc/libpaf.pdf
 endif
 
-
-
 doxygen: .doxygen
 
 clean-local:
 	rm -f .doxygen
+	rm -f .testcert
+	rm -rf test/cert
 	rm -rf doc/html
-	rm -rf test/domains.d-*
+	rm -rf test/domains
 if PDFLATEX
 	rm -rf doc/latex
 	rm -f doc/libpaf.pdf
@@ -90,6 +90,11 @@ distclean-local:
 		common/config.h.in
 	find . -name \*~ -print0 | xargs -0 rm -f
 
+testcert: .testcert
+
+.testcert: test/cert.yaml
+	./test/gencert.py < test/cert.yaml && touch .testcert
+
 verify-versions: all
 	./test/verify_versions.py $(srcdir)/include/paf.h \
 		$(srcdir)/README.md $(builddir) \
@@ -97,15 +102,15 @@ verify-versions: all
 		@PAF_MAJOR_VERSION@ @PAF_MINOR_VERSION@ \
 		@PAF_PATCH_VERSION@
 
-paftest-run: paftest
+paftest-run: testcert paftest
 	./paftest -c $(TESTS)
 
-pytest-run: all
+pytest-run: testcert all
 	export PYTHONPATH=$(PWD)/python:$$PYTHONPATH && \
 	cd test && \
 	$(PYTEST) -v -s $(PYTESTS)
 
-paftest-run-valgrind: paftest
+paftest-run-valgrind: testcert paftest
 	IN_VALGRIND=1 valgrind --tool=memcheck --leak-check=full -q \
 		--suppressions=test/libc.supp \
 		--suppressions=test/xcm.supp \

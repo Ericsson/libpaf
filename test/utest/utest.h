@@ -84,6 +84,15 @@
 	}                                                               \
     } while(0)
 
+#define CHKNULL(x)							\
+    do {                                                                \
+	if ((x) != NULL) {						\
+	    fprintf(stderr, "\n%s:%d: %s \"%s\" not NULL.\n", __FILE__, \
+		    __LINE__, __func__, __STRING(x));                   \
+	    return UTEST_FAIL;                                          \
+	}                                                               \
+    } while(0)
+
 #define CHKPRINT(x, msgfmt, ...)                                        \
     do {                                                                \
 	if (!(x)) {                                                     \

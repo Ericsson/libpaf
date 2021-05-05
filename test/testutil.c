@@ -5,19 +5,19 @@
 
 #include "testutil.h"
 
-#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sched.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
-#include <sys/wait.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
-#include <sched.h>
-#include <limits.h>
+#include <sys/types.h>
 #include <sys/utsname.h>
-#include <errno.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "util.h"
 
@@ -84,19 +84,40 @@ int tu_waitstatus(pid_t p)
     return 0;
 }
 
+static uint32_t rand32(void)
+{
+    uint32_t r;
+
+    tu_randblk(&r, sizeof(r));
+
+    return r;
+}
+
 int tu_randint(int min, int max)
 {
     if (min == max)
 	return min;
 
-    int diff = max-min;
+    int diff = max - min;
 
-    return min+(random() % diff);
+    return min + (rand32() % diff);
 }
 
-void tu_randomize(uint8_t *buf, int len)
+bool tu_randbool(void)
 {
-    int i;
-    for (i=0; i<len; i++)
-	buf[i] = (uint8_t)tu_randint(0, 255);
+    return tu_randint(0, 1);
+}
+
+void tu_randblk(void *buf, int len)
+{
+    while (len > 0) {
+	/* getentropy() puts a limit of 256 bytes at a time */
+	size_t batch = len < 256 ? len : 256;
+
+	if (getentropy(buf, batch) < 0)
+	    abort();
+
+	buf += batch;
+	len -= batch;
+    }
 }

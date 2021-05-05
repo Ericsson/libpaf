@@ -2,7 +2,7 @@
 
 m4_define([paf_major_version], [1])
 m4_define([paf_minor_version], [0])
-m4_define([paf_patch_version], [0])
+m4_define([paf_patch_version], [1])
 m4_define([paf_version],[paf_major_version.paf_minor_version.paf_patch_version])
 
 m4_define([paf_abi_major_version], [m4_eval(paf_major_version - 1)])
@@ -36,6 +36,10 @@ AC_CHECK_HEADERS(xcm.h, [],
                  [AC_MSG_ERROR([Unable to find XCM header files.])])
 AC_CHECK_LIB(xcm, xcm_connect, [],
              [AC_MSG_ERROR([Unable to find the XCM library.])])
+AC_CHECK_LIB(xcm, xcm_connect_a,
+             [AC_DEFINE([HAVE_XCM_WRITABLE_ATTRS], [1],
+	                [XCM version with writable attribute support.])], [])
+
 AC_CHECK_HEADERS(jansson.h, [],
                  [AC_MSG_ERROR([Unable to find Jansson header files.])])
 AC_CHECK_LIB(jansson, json_loads, [],

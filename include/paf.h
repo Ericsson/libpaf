@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2020 Ericsson AB
+ * Copyright(c) 2020-2021 Ericsson AB
  */
 
 #ifndef PAF_H
@@ -21,7 +21,7 @@ extern "C" {
  *
  * @author Mattias Rönnblom
  * @version 0.0 [API]
- * @version 1.0.0 [Implementation]
+ * @version 1.0.1 [Implementation]
  *
  * @section overview Overview
  *
@@ -40,30 +40,86 @@ extern "C" {
  * domain. A domain is served by one or more Pathfinder server
  * instances.
  *
- * In order to connect to a domain, an application issues paf_attach()
- * with the appropriate service discovery domain name. It need not
- * know what servers are currently serving that domain.
+ * In order to participate in a domain, an application issues
+ * paf_attach() with the appropriate service discovery domain name. It
+ * need not know what servers are currently serving that domain.
  *
- * @subsection domain_mapping Domain Mapping
+ * @subsection domain_mapping Domain Configuration
  *
  * The mapping between a service discovery domain name and the set of
  * addresses to the Pathfinder servers serving this domain is kept in
  * a file. The configuration for a particular domain name must be
  * stored in a file with the same name as the domain, and be located
  * in the domain files directory.  The compile-time default location
- * is is @c /run/paf/domains.d/. The contents of the file is a
- * newline-separated list of XCM addresses. The directory may contain
- * an arbitrary amount of domains.
+ * is is @c /run/paf/domains.d/.
  *
- * In case the file does not exist at the time of the paf_attach()
- * call, the library will periodically check if it has been created.
+ * The directory may contain an arbitrary number of domains.
+ *
+ * In case the domain file does not exist at the time of the
+ * paf_attach() call, the library will periodically check if it has
+ * been created.
  *
  * In case the file is modified (e.g., a server is added, removed or
- * has its address changed), it will be re-read by the library. If the
- * file is removed, the set of servers is considered empty.
+ * has its address changed), the file will be re-read by the
+ * library. If the file is removed, the set of servers is considered
+ * empty.
  *
  * The environment variable @c PAF_DOMAINS may set in case a
  * non-standard directory is preferred over the default.
+ *
+ * @subsubsection domain_file_format File Format
+ * 
+ * The library supports two file formats. Either the contents of the
+ * file is a newline-separated list of XCM addresses, or a JSON
+ * object.
+ *
+ * The newline-separated format allows for comments. In this format,
+ * empty lines and lines beginning with '#' are ignored. JSON does not
+ * support comments.
+ *
+ * A domain file in the JSON format must contain a root JSON object,
+ * with a key "servers". The value of "servers" must be an array of
+ * zero or more JSON objects, each representing a server.
+ *
+ * The server object must have a key "address", with a string value.
+ *
+ * In case the transport protocol uses TLS, three optional keys may
+ * be presented in the server object:
+ *
+ * - "tlsCertificateFile": the leaf certificate to use.
+ * - "tlsKeyFile": the private key corresponding to the leaf certificate.
+ * - "tlsTrustedCaFile": a file containing the trusted CA certificates.
+ *
+ * In case some/all of the certificate file related keys are left out,
+ * the library will fall back to using the XCM defaults.
+ *
+ * Below is an example of a domain file in JSON format:
+ * @code
+ * {
+ *   "servers": [
+ *     {
+ *       "address": "tls:1.2.3.4:4444",
+ *       "tlsCertificateFile": "/etc/paf/certs/cert.pem",
+ *       "tlsKeyFile": "/etc/paf/certs/key.pem",
+ *       "tlsTrustedCaFile": "/etc/paf/certs/ca-bundle.pem"
+ *     },
+ *     {
+ *       "address": "tls:5.6.7.8:8888"
+ *     },
+ *     {
+ *       "address": "ux:foo"
+ *     }
+ *   ]
+ * }
+ * @endcode
+ * 
+ * The same configuration (minus the certificate-related
+ * configuration), but in the newline-separated format:
+ * @code
+ * "tls:1.2.3.4:4444"
+ * "tls:5.6.7.8:8888"
+ * "ux:foo"
+ * @endcode
  *
  * @section thread_safety Multi-thread Safety
  *

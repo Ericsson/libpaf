@@ -14,8 +14,9 @@
 #include "list.h"
 #include "msg.h"
 #include "proto_ta.h"
-#include "sd.h"
 #include "ptimer.h"
+#include "sd.h"
+#include "server_conf.h"
 
 #define LINK_ERR_DETACHED (-2)
 
@@ -53,7 +54,7 @@ struct link
 {
     int64_t link_id;
     int64_t client_id;
-    char *domain_addr;
+    struct server_conf *server;
     enum link_state state;
 
     struct sd *sd;
@@ -85,7 +86,7 @@ struct link
 LIST_HEAD(link_list, link);
 
 struct link *link_create(int64_t link_id, int64_t client_id,
-			 const char *domain_addr, struct sd *sd,
+			 const struct server_conf *server, struct sd *sd,
 			 struct ptimer *timer, int epoll_fd,
 			 const char *log_ref);
 

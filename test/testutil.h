@@ -7,6 +7,7 @@
 #define TESTUTIL_H
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include <sys/types.h>
 
 void tu_msleep(int ms);
@@ -19,6 +20,7 @@ int tu_executef_es(const char *fmt, ...);
 int tu_waitstatus(pid_t p);
 
 int tu_randint(int min, int max);
-void tu_randomize(uint8_t *buf, int len);
+bool tu_randbool(void);
+void tu_randblk(void *buf, int len);
 
 #endif

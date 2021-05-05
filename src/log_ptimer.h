@@ -45,9 +45,9 @@
 #define log_ptimer_ack(ptimer, tmo_id)					\
     log_ptimer_debug(ptimer, "Acknowledged timeout id %"PRId64".", tmo_id)
 
-#define log_ptimer_arm(ptimer, timeout)					\
-    log_ptimer_debug(ptimer, "Arming timer fd with a %.0f ms timeout.", \
-		     timeout*1000)
+#define log_ptimer_arm(ptimer, abs_timeout)			      \
+    log_ptimer_debug(ptimer, "Arming timer fd with timeout at %.3f.", \
+		     abs_timeout)
 
 #define log_ptimer_disarm(ptimer)			\
     log_ptimer_debug(ptimer, "Timer fd disarmed.")
