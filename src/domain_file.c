@@ -11,20 +11,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "conf.h"
 #include "util.h"
 
 #include "domain_file.h"
 
-#define DOMAINS_ENV "PAF_DOMAINS"
-#define DEFAULT_DOMAINS_DIR "/run/paf/domains.d"
-
 static int get_domain_filename(const char *domain, char *filename,
 			       size_t capacity)
 {
-    const char *domains_dir = getenv(DOMAINS_ENV);
-
-    if (domains_dir == NULL)
-        domains_dir = DEFAULT_DOMAINS_DIR;
+    const char *domains_dir = conf_get_domains_dir();
 
     if (snprintf(filename, capacity, "%s/%s", domains_dir, domain) >= capacity)
         return -1;

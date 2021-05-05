@@ -6,7 +6,14 @@
 #ifndef CONF_H
 #define CONF_H
 
+#include <stdbool.h>
 #include <stdint.h>
+
+#define DOMAINS_DIR_ENV "PAF_DOMAINS"
+#define DEFAULT_DOMAINS_DIR "/run/paf/domains.d"
+
+#define DEBUG_ENABLED_ENV "PAF_DEBUG"
+#define DEFAULT_DEBUG_ENABLED (false)
 
 #define RESCAN_ENV "PAF_RESCAN"
 #define DEFAULT_RESCAN (5) /* s */
@@ -19,6 +26,10 @@
 
 #define TTL_ENV "PAF_TTL"
 #define DEFAULT_TTL (30) /* s */
+
+bool conf_get_debug_enabled(void);
+
+const char *conf_get_domains_dir(void);
 
 double conf_get_rescan_period(void);
 double conf_get_reconnect_min(void);

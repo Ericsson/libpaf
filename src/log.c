@@ -11,6 +11,7 @@
 
 #include <paf_props.h>
 
+#include "conf.h"
 #include "util.h"
 
 #include "log.h"
@@ -195,8 +196,6 @@ static void init(void) __attribute__((constructor));
 
 static void init(void)
 {
-    char *debug = getenv(PAF_ENV_DEBUG);
-    if (debug && (strcmp(debug, "1") == 0 || strcmp(debug, "true") == 0))
-        console_log = true;
+    console_log = conf_get_debug_enabled();
 }
 
