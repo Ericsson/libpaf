@@ -115,46 +115,19 @@ double ut_ftime(clockid_t clk_id)
     return ut_timespec_to_f(&now);
 }
 
-/* Using libc getentropy() would be easier, but it's not available on
-   all systems. */
-void ut_getentropy(void *buffer, size_t length)
+static void entropy(void *buffer, size_t len)
 {
-    UT_SAVE_ERRNO;
+    int rc = getentropy(buffer, len);
 
-    int fd;
-
-    do {
-        fd = open("/dev/urandom", O_RDONLY);
-    } while (fd < 0 && errno == EINTR);
-
-    /* An error from open() means that either /dev/urandom doesn't
-       exist, or we are out of fds - both of which are reasonably good
-       reasons to crash. */
-    if (fd < 0) {
-        log_ut_urandom_open_failure(errno);
-        abort();
-    }
-
-    /* A read() from /dev/urandom will return as many bytes as
-       requested, up to 256 bytes. See random(4) for details. */
-    assert(length <= 256);
-    ssize_t rc = read(fd, buffer, length);
-
-    if (rc < 0) {
-        log_ut_urandom_read_failure(errno);
-        abort();
-    }
-
-    close(fd);
-
-    UT_RESTORE_ERRNO_DC;
+    if (rc < 0)
+	abort();
 }
 
 int64_t ut_rand_id(void)
 {
     int64_t num;
 
-    ut_getentropy(&num, sizeof(num));
+    entropy(&num, sizeof(num));
 
     return num >= 0 ? num : -num;
 }
@@ -163,7 +136,7 @@ double ut_frand(void)
 {
     uint64_t num;
 
-    ut_getentropy(&num, sizeof(num));
+    entropy(&num, sizeof(num));
 
     return (double)num / (double)UINT64_MAX;
 }

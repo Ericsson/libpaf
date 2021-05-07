@@ -32,6 +32,9 @@ AC_CHECK_PROG(HAVE_PDFLATEX, pdflatex, yes, no)
 
 AM_CONDITIONAL(PDFLATEX, [test x$HAVE_PDFLATEX = xyes])
 
+AC_CHECK_FUNC(getentropy, [],
+             [AC_MSG_ERROR([glibc 2.25 or later is required.])])
+
 AC_CHECK_HEADERS(xcm.h, [],
                  [AC_MSG_ERROR([Unable to find XCM header files.])])
 AC_CHECK_LIB(xcm, xcm_connect, [],
