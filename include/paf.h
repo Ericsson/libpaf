@@ -11,6 +11,8 @@ extern "C" {
 
 /*! @mainpage Pathfinder Client Library API
  *
+ * @tableofcontents
+ *
  * This is the documentation for the Pathfinder Client Library API.
  *
  * - paf.h Core functionality
@@ -31,6 +33,9 @@ extern "C" {
  *
  * All the functions in this API are non-blocking in the sense that no
  * blocking system calls are made.
+ *
+ * For simplicity, the library implementing this API is refered to as
+ * @c libpaf, although there might be other implementations as well.
  *
  * @section domains Service Discovery Domains
  *
@@ -56,20 +61,19 @@ extern "C" {
  * The directory may contain an arbitrary number of domains.
  *
  * In case the domain file does not exist at the time of the
- * paf_attach() call, the library will periodically check if it has
- * been created.
+ * paf_attach() call, @c libpaf will periodically check if it has been
+ * created.
  *
  * In case the file is modified (e.g., a server is added, removed or
- * has its address changed), the file will be re-read by the
- * library. If the file is removed, the set of servers is considered
- * empty.
+ * has its address changed), the file will be re-read by @c libpaf.
+ * If the file is removed, the set of servers is considered empty.
  *
  * The environment variable @c PAF_DOMAINS may set in case a
  * non-standard directory is preferred over the default.
  *
  * @subsubsection domain_file_format File Format
  * 
- * The library supports two file formats. Either the contents of the
+ * @c libpaf supports two file formats. Either the contents of the
  * file is a newline-separated list of XCM addresses, or a JSON
  * object.
  *
@@ -91,7 +95,7 @@ extern "C" {
  * - "tlsTrustedCaFile": a file containing the trusted CA certificates.
  *
  * In case some/all of the certificate file related keys are left out,
- * the library will fall back to using the XCM defaults.
+ * @c libpaf will fall back to using the XCM defaults.
  *
  * Below is an example of a domain file in JSON format:
  * @code
@@ -121,6 +125,49 @@ extern "C" {
  * "ux:foo"
  * @endcode
  *
+ * @subsubsection rescan Domain File Rescan
+ *
+ * For all domains the application currently has attached to, @c
+ * libpaf tracks domain file changes. This check is performed
+ * periodically every ~5 s. A small random component is added to avoid
+ * load spikes, in case there are many clients on the same system.
+ *
+ * This default interval may be changed by setting the @c PAF_RESCAN
+ * environment variable. The value a floating point number (in s). If
+ * set to zero, the rescanning is disabled.
+ *
+ * @section reconnect Connection Reestablishment
+ *
+ * In case the connection to a server is lost, or never was
+ * successfully established in the first place, @c libpaf will perform
+ * another attempt at a later time.
+ *
+ * @c libpaf uses exponential back-off. The first retry is scheduled
+ * to occur after 10 ms. Every failed attempt double the retry
+ * interval, up to a maximum of 5 s. These two defaults may be changed
+ * by setting the @c PAF_RECONNECT_MIN and/or @c PAF_RECONNECT_MAX
+ * environment variables.
+ *
+ * @section ttl Service TTL
+ *
+ * A service publish via the library has a time-to-live (TTL) of 30
+ * s. This default may be changed by setting the @c PAF_TTL
+ * environment variable, beforing the paf_publish() call. The TTL must
+ * be an non-negative integer.
+ *
+ * @section tracing Tracing
+ *
+ * @c libpaf comes with built-in support for tracing. The library
+ * supports writing traces to stderr in human-readable format, or
+ * direct them to LTTng. The former is always available, and the
+ * latter is available if the library is built with LTTng support.
+ *
+ * To enable stderr-type tracing, set the @c PAF_DEBUG environment
+ * variable to "1", before starting the application.
+ *
+ * To enabled LTTng tracing, enable the relevant libpaf LTTng
+ * tracepoints.
+ *
  * @section thread_safety Multi-thread Safety
  *
  * All API calls are multi-thread (MT) safe when called on different
@@ -132,20 +179,6 @@ extern "C" {
  * No API calls are MT safe when called on the same context or service
  * properties. For that to work, external synchronization (e.g., a
  * mutex lock) is required.
- *
- * @section tracing Tracing
- *
- * The Pathfinder Client Library comes with built-in support for
- * tracing. The library supports writing traces to stderr in
- * human-readable format, or direct them to LTTng. The former is
- * always available, and the latter is available if the library is
- * built with LTTng support.
- *
- * To enable stderr-type tracing, set the @c PAF_DEBUG environment
- * variable to "1", before starting the application.
- *
- * To enabled LTTng tracing, enable the relevant libpaf LTTng
- * tracepoints.
  */
 
 /*!
