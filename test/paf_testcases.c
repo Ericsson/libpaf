@@ -503,21 +503,19 @@ static int assure_service_count(int count)
     return UTEST_SUCCESS;
 }
 
-#if 0
 static int wait_for_service_count(struct paf_context *context, double duration,
-				  const char *addr, int count)
+				  int count)
 {
-    double deadline = ut_ftime() + duration;
+    double deadline = ut_ftime(CLOCK_REALTIME) + duration;
     for (;;) {
-	int rc = assure_service_count(addr, count);
+	int rc = assure_service_count(count);
 	if (rc == 0)
 	    return UTEST_SUCCESS;
-	if (ut_ftime() > deadline)
+	if (ut_ftime(CLOCK_REALTIME) > deadline)
 	    return UTEST_FAIL;
 	wait_for(context, 0.1);
     }
 }
-#endif
 
 static int server_assure_subscription(const char *addr, int64_t sub_id,
 				      const char *filter)
@@ -557,9 +555,8 @@ TESTCASE(paf, publish_flaky_servers)
 
     CHK(service_id >= 0);
 
-    CHKNOERR(wait_for(context, MAX_RECONNECT_PERIOD));
-
-    CHKNOERR(assure_service(service_id, props));
+    CHKNOERR(wait_for_service(context, MAX_RECONNECT_PERIOD,
+			      service_id, props));
 
     stop_servers();
 
@@ -567,9 +564,8 @@ TESTCASE(paf, publish_flaky_servers)
 
     CHKNOERR(start_servers());
 
-    CHKNOERR(wait_for(context, MAX_RECONNECT_PERIOD));
-
-    CHKNOERR(assure_service(service_id, props));
+    CHKNOERR(wait_for_service(context, MAX_RECONNECT_PERIOD,
+			      service_id, props));
 
     paf_close(context);
 
@@ -603,9 +599,7 @@ TESTCASE(paf, publish_unpublish_many)
         CHK(service_ids[i] >= 0);
     }
 
-    do {
-        CHKNOERR(wait_for(context, 0.1));
-    } while (assure_service_count(MANY) < 0);
+    CHKNOERR(wait_for_service_count(context, 5.0, MANY));
 
     for (i = 0; i < 10; i++) {
         int num = rand() % MANY;
@@ -618,9 +612,7 @@ TESTCASE(paf, publish_unpublish_many)
     for (i = 0; i < MANY; i++)
         paf_unpublish(context, service_ids[i]);
 
-    do {
-        CHKNOERR(wait_for(context, 0.1));
-    } while (assure_service_count(0) < 0);
+    CHKNOERR(wait_for_service_count(context, LAG, 0));
 
     paf_close(context);
 
@@ -1356,7 +1348,7 @@ TESTCASE(paf, change_domains_file)
     int64_t service_id = paf_publish(context, props);
     CHKNOERR(service_id);
 
-    CHKNOERR(wait_for(context, 0.5));
+    CHKNOERR(wait_for(context, LAG));
 
     CHKNOERR(server_assure_service(servers[0].addr, service_id, props));
     CHK(server_assure_service(servers[1].addr, service_id, props) < 0);
