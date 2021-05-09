@@ -15,6 +15,8 @@
 
 #include "link.h"
 
+#define MAX_DETACH_TIME(num_services) (0.5 + 0.001 * (num_services))
+
 #define SLABEL(name)				     \
     case link_state_ ## name:                        \
     return #name
@@ -189,12 +191,20 @@ static void try_finish_detach(struct link *link)
 {
     size_t num_service_relays = LIST_COUNT(&link->service_relays, entry);
 
-    if (num_service_relays == 0) {
-	set_state(link, link_state_detached);
-        log_link_detached(link);
-    } else
-        log_link_pending_unpublications(link, num_service_relays);
+    bool tmo_expired = ptimer_has_expired(link->timer, link->detached_tmo);
 
+    if (num_service_relays > 0 && !tmo_expired) {
+	log_link_pending_unpublications(link, num_service_relays);
+	return;
+    }
+
+    if (tmo_expired)
+	log_link_forced_detachment(link, link->max_detach_time);
+
+    link->state = link_state_detached;
+    log_link_detached(link);
+
+    ptimer_reschedule_rel(link->timer, 0, &link->detached_tmo);
 }
 
 /* XXX: 1. relay -> obj_relay
@@ -717,12 +727,12 @@ struct link *link_create(int64_t link_id, int64_t client_id,
 
     link->state = link_state_connecting;
 
-    link->reconnect_tmo = ptimer_install_rel(link->timer, 0);
+    link->reconnect_tmo = ptimer_schedule_rel(link->timer, 0);
 
     return link;
 }
 
-static void reinstall_reconnect_tmo(struct link *link)
+static void assure_reconnect_tmo(struct link *link)
 {
     /* randomized expontial backoff */
     double reconnect_min = conf_get_reconnect_min();
@@ -738,8 +748,8 @@ static void reinstall_reconnect_tmo(struct link *link)
     if (link->reconnect_time < reconnect_min)
 	link->reconnect_time = reconnect_min;
 
-    ptimer_reinstall_rel(link->timer, link->reconnect_time,
-			 &link->reconnect_tmo);
+    ptimer_reschedule_rel(link->timer, link->reconnect_time,
+			  &link->reconnect_tmo);
 }
 
 static void restart(struct link *link)
@@ -759,7 +769,7 @@ static void restart(struct link *link)
 
     set_state(link, link_state_connecting);
 
-    reinstall_reconnect_tmo(link);
+    assure_reconnect_tmo(link);
 }
 
 #ifdef HAVE_XCM_WRITABLE_ATTRS
@@ -806,7 +816,7 @@ static void try_connect(struct link *link)
 
     if (link->conn == NULL) {
         log_link_xcm_connect_failed(link, link->server->addr, connect_errno);
-	reinstall_reconnect_tmo(link);
+	assure_reconnect_tmo(link);
 	return;
     }
 
@@ -877,10 +887,14 @@ void link_detach(struct link *link)
     if (link->state == link_state_operational) {
         uninstall_service_relays(link);
         link->state = link_state_detaching;
+	link->max_detach_time =
+	    MAX_DETACH_TIME(LIST_COUNT(&link->service_relays, entry));
+	link->detached_tmo =
+	    ptimer_schedule_rel(link->timer, link->max_detach_time);
     } else {
+	link->detached_tmo = ptimer_schedule_rel(link->timer, 0);
+	link->state = link_state_detached;
 	log_link_detached(link);
-        link->state = link_state_detached;
-	ptimer_reinstall_rel(link->timer, 0, &link->detached_tmo);
     }
 }
 

@@ -107,20 +107,48 @@ static int start_servers(void)
     return UTEST_SUCCESS;
 }
 
-static void stop_server(struct server *server)
+static int signal_server(struct server *server, int signo)
 {
-    if (server->pid > 0) {
-        kill(server->pid, SIGTERM);
-        tu_waitstatus(server->pid);
-        server->pid = -1;
-    }
+    return server->pid >= 0 ? kill(server->pid, signo) : -1;
 }
 
-static void stop_servers(void)
+static int signal_servers(int signo)
 {
+    int rc = 0;
     int i;
-    for (i = 0; i < NUM_SERVERS; i++)
-	stop_server(&servers[i]);
+    for (i = 0; i < NUM_SERVERS; i++) {
+	struct server *server = &servers[i];
+	if (server->pid > 0 && signal_server(server, signo) < 0)
+	    rc = -1;
+    }
+    return rc;
+}
+
+static int stop_server(struct server *server)
+{
+    if (signal_server(server, SIGTERM) < 0)
+	return -1;
+
+    if (tu_waitstatus(server->pid) < 0)
+	return -1;
+
+    server->pid = -1;
+
+    return 0;
+}
+
+static int stop_servers(void)
+{
+    int rc = 0;
+    int i;
+
+    for (i = 0; i < NUM_SERVERS; i++) {
+	struct server *server = &servers[i];
+	if (server->pid > 0 && stop_server(server) < 0)
+	    rc = -1;
+    }
+
+    return rc;
 }
 
 static uint16_t gen_tcp_port(void)
@@ -281,6 +309,9 @@ static int domain_setup(void)
 
 #define PAF_RECONNECT_MAX (0.1)
 #define MAX_RECONNECT_PERIOD (PAF_RECONNECT_MAX + LAG)
+
+#define DETACH_TIMEOUT (0.5)
+#define MAX_DETACH_TIME (DETACH_TIMEOUT + LAG)
 
 #define TTL (1)
 
@@ -558,7 +589,7 @@ TESTCASE(paf, publish_flaky_servers)
     CHKNOERR(wait_for_service(context, MAX_RECONNECT_PERIOD,
 			      service_id, props));
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     CHKNOERR(wait_for(context, 0.25));
 
@@ -618,7 +649,7 @@ TESTCASE(paf, publish_unpublish_many)
 
     paf_props_destroy(base_props);
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -672,7 +703,7 @@ TESTCASE_SERIALIZED(paf, connect_publish_latency_retry)
 
     CHKNOERR(tu_waitstatus(client_pid));
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -691,7 +722,7 @@ TESTCASE(paf, connect_publish_latency_no_retry)
 
     CHKNOERR(tu_waitstatus(client_pid));
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -733,7 +764,7 @@ static int test_modify(enum sync_mode mode)
 
     CHKNOERR(assure_service(service_id, mod_props));
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     paf_props_destroy(orig_props);
     paf_props_destroy(mod_props);
@@ -807,7 +838,7 @@ TESTCASE(paf, subscribe_flaky_server)
 	     assure_service(-1, props) < 0 ||
 	     assure_subscription(sub_id, filter_s) < 0);
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     CHKNOERR(wait_for(context, 0.1));
 
@@ -862,7 +893,7 @@ TESTCASE(paf, subscription_match)
 
     paf_close(context);
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -953,7 +984,7 @@ TESTCASE(paf, subscription_escaped)
 
     paf_close(context);
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -989,7 +1020,7 @@ static int test_timeout(enum timeout_mode mode) {
     double start = ut_ftime(CLOCK_REALTIME);
 
     if (mode == timeout_mode_server_unavailable)
-        stop_servers();
+        CHKNOERR(stop_servers());
     else
         paf_close(pub_context);
 
@@ -1011,7 +1042,7 @@ static int test_timeout(enum timeout_mode mode) {
     if (mode == timeout_mode_server_unavailable)
         paf_close(pub_context);
     else
-        stop_servers();
+        CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -1039,7 +1070,7 @@ TESTCASE(paf, invalid_filter)
 
     paf_close(context);
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -1156,7 +1187,7 @@ TESTCASE(paf, unsubscribe_syncing)
 
     CHKINTEQ(hits, 0);
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     paf_props_destroy(props);
     paf_close(context);
@@ -1194,7 +1225,7 @@ TESTCASE(paf, no_matches_after_unsubscribe)
     paf_props_destroy(props);
     paf_close(context);
 
-    stop_servers();
+    CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
 }
@@ -1240,7 +1271,7 @@ static int test_detach(bool with_server, bool manual_unpublish,
 
     if (with_server) {
         CHKNOERR(assure_service_count(0));
-        stop_servers();
+        CHKNOERR(stop_servers());
     }
 
     return UTEST_SUCCESS;
@@ -1272,7 +1303,6 @@ TESTCASE(paf, detach_no_server)
     return test_detach(false, true, DETACH_NUM_SERVICES);
 }
 
-#if 0
 TESTCASE(paf, detach_unresponsive_server)
 {
     CHKNOERR(start_servers());
@@ -1284,22 +1314,21 @@ TESTCASE(paf, detach_unresponsive_server)
     struct paf_props *props = paf_props_create();
     CHKNOERR(paf_publish(context, props));
 
-    CHKNOERR(wait_for_service_count(context, 1, domain_addr, 1));
+    CHKNOERR(wait_for_service_count(context, LAG, 1));
 
-    CHKNOERR(kill(server_pid, SIGSTOP));
+    CHKNOERR(signal_servers(SIGSTOP));
 
     paf_detach(context);
 
-    CHKINTEQ(wait_for(context, 1), PAF_ERR_DETACHED);
+    CHKINTEQ(wait_for(context, MAX_DETACH_TIME), PAF_ERR_DETACHED);
+
+    CHKNOERR(signal_servers(SIGCONT));
 
     paf_props_destroy(props);
     paf_close(context);
 
-    CHKNOERR(kill(server_pid, SIGCONT));
-
     return UTEST_SUCCESS;
 }
-#endif
 
 TESTCASE(paf, create_domains_file)
 {

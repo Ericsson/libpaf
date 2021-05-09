@@ -30,6 +30,10 @@
 #define log_link_detached(link)			\
     log_link_debug(link, "Link is detached.")
 
+#define log_link_forced_detachment(link, detach_tmo)			\
+    log_link_debug(link, "Server failed to respond within the allowed " \
+		   "%.0f ms. Forcing detach.", (detach_tmo) * 1e3)
+
 #define log_link_dead(link)			\
     log_link_debug(link, "Link is dead.")
 

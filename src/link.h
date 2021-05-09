@@ -73,6 +73,7 @@ struct link
     struct xcm_socket *conn;
 
     int64_t detached_tmo;
+    double max_detach_time;
 
     int64_t next_ta_id;
     struct msg_queue out_queue;

@@ -120,7 +120,7 @@ static void remove_tmo(struct ptimer *timer, struct tmo *tmo)
     update_epoll(timer);
 }
 
-static int64_t install_abs(struct ptimer *timer, double abs_tmo)
+static int64_t schedule_abs(struct ptimer *timer, double abs_tmo)
 {
     int tmo_id = next_tmo_id(timer);
 
@@ -133,32 +133,33 @@ static int64_t install_abs(struct ptimer *timer, double abs_tmo)
     return tmo_id;
 }
 
-int64_t ptimer_install_abs(struct ptimer *timer, double abs_tmo)
+int64_t ptimer_schedule_abs(struct ptimer *timer, double abs_tmo)
 {
-    int64_t tmo_id = install_abs(timer, abs_tmo);
+    int64_t tmo_id = schedule_abs(timer, abs_tmo);
 
-    log_ptimer_install_abs(timer, tmo_id, abs_tmo);
+    log_ptimer_schedule_abs(timer, tmo_id, abs_tmo);
 
     return tmo_id;
 }
 
-int64_t ptimer_install_rel(struct ptimer *timer, double rel_tmo)
+int64_t ptimer_schedule_rel(struct ptimer *timer, double rel_tmo)
 {
     if (rel_tmo < 0)
 	rel_tmo = 0;
 
-    int64_t tmo_id = install_abs(timer, ut_ftime(timer->clk_id) + rel_tmo);
+    int64_t tmo_id = schedule_abs(timer, ut_ftime(timer->clk_id) + rel_tmo);
 
-    log_ptimer_install_rel(timer, tmo_id, rel_tmo);
+    log_ptimer_schedule_rel(timer, tmo_id, rel_tmo);
 
     return tmo_id;
 }
 
-void ptimer_reinstall_rel(struct ptimer *timer, double rel_tmo,
-			  int64_t *tmo_id)
+void ptimer_reschedule_rel(struct ptimer *timer, double rel_tmo,
+			   int64_t *tmo_id)
 {
-    ptimer_cancel(timer, tmo_id);
-    *tmo_id = ptimer_install_rel(timer, rel_tmo);
+    if (*tmo_id >= 0)
+	ptimer_cancel(timer, tmo_id);
+    *tmo_id = ptimer_schedule_rel(timer, rel_tmo);
 }
 
 bool ptimer_has_expired(struct ptimer *timer, int64_t tmo_id)

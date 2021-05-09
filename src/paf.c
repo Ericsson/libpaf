@@ -149,7 +149,7 @@ static void conf_rescan_tmo(struct paf_context *ctx)
 
     if (ctx->rescan_period > 0)
 	ctx->rescan_tmo =
-	    ptimer_install_rel(ctx->mono_timer, ctx->rescan_period);
+	    ptimer_schedule_rel(ctx->mono_timer, ctx->rescan_period);
 }
 
 static void conf_sd_tmo(struct paf_context *ctx)
@@ -162,7 +162,7 @@ static void conf_sd_tmo(struct paf_context *ctx)
 
 	log_ctx_sd_timeout(ctx, ctx->rt_timer->clk_id, abs_tmo);
 
-	ctx->sd_tmo = ptimer_install_abs(ctx->rt_timer, abs_tmo);
+	ctx->sd_tmo = ptimer_schedule_abs(ctx->rt_timer, abs_tmo);
     }
 }
 
