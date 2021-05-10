@@ -34,7 +34,7 @@ extern "C" {
  * All the functions in this API are non-blocking in the sense that no
  * blocking system calls are made.
  *
- * For simplicity, the library implementing this API is refered to as
+ * For simplicity, the library implementing this API is referred to as
  * @c libpaf, although there might be other implementations as well.
  *
  * @section domains Service Discovery Domains
@@ -87,8 +87,8 @@ extern "C" {
  *
  * The server object must have a key "address", with a string value.
  *
- * In case the transport protocol uses TLS, three optional keys may
- * be presented in the server object:
+ * In case the transport protocol uses TLS, three optional keys may be
+ * present in the server object:
  *
  * - "tlsCertificateFile": the leaf certificate to use.
  * - "tlsKeyFile": the private key corresponding to the leaf certificate.
