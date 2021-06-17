@@ -74,6 +74,11 @@
         log_ctx_debug(ctx, "%s.", buf);					\
     } while (0)
 
+#define log_ctx_set_ttl(ctx, service_id, old_ttl, new_ttl)		\
+    log_ctx_debug(ctx, "Changing TTL for service id 0x%"PRIx64		\
+		  " from %"PRId64" to %"PRId64" s.", service_id,	\
+		  old_ttl, new_ttl)
+
 #define log_ctx_unpublish(ctx, service_id)				\
     log_ctx_debug(ctx, "Unpublishing service id 0x%"PRIx64".",		\
 		  service_id)

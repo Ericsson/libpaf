@@ -989,12 +989,14 @@ TESTCASE(paf, subscription_escaped)
     return UTEST_SUCCESS;
 }
 
-enum timeout_mode {
+enum timeout_mode
+{
     timeout_mode_server_unavailable,
     timeout_mode_client_disconnect
 };
 
-static int test_timeout(enum timeout_mode mode) {
+static int test_timeout_ttl(enum timeout_mode mode, int64_t ttl)
+{
     struct paf_context *sub_context = paf_attach(domain_name);
 
     int hits = 0;
@@ -1008,7 +1010,11 @@ static int test_timeout(enum timeout_mode mode) {
 
     struct paf_props *props = paf_props_create();
 
-    CHKNOERR(paf_publish(pub_context, props));
+    int64_t service_id = paf_publish(pub_context, props);
+    CHKNOERR(service_id);
+
+    if (ttl != TTL)
+	paf_set_ttl(pub_context, service_id, ttl);
 
     paf_props_destroy(props);
 
@@ -1034,8 +1040,8 @@ static int test_timeout(enum timeout_mode mode) {
 
     CHKINTEQ(hits, 2);
 
-    CHK(latency > TTL);
-    CHK(latency < (TTL+0.5));
+    CHK(latency > ttl);
+    CHK(latency < (ttl+0.5));
 
     paf_close(sub_context);
 
@@ -1045,6 +1051,16 @@ static int test_timeout(enum timeout_mode mode) {
         CHKNOERR(stop_servers());
 
     return UTEST_SUCCESS;
+}
+
+static int test_timeout(enum timeout_mode mode)
+{
+    int rc;
+    if ((rc = test_timeout_ttl(mode, TTL)) < 0)
+	return rc;
+    if ((rc = test_timeout_ttl(mode, TTL * 2)) < 0)
+	return rc;
+    return UTEST_SUCCESS;    
 }
 
 TESTCASE(paf, match_timeout_after_server_unavailability)

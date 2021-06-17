@@ -144,6 +144,7 @@ def test_subscribe_publish_modify_unpublish(domain):
 
     props['new_key'] = { 'new_value' }
     pub_context.modify(service_id, props)
+    pub_context.set_ttl(service_id, 17)
 
     wait([sub_context, pub_context], timeout=0.25)
 

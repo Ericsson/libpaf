@@ -22,8 +22,8 @@ extern "C" {
  * - paf_match.h Subscription matching.
  *
  * @author Mattias Rönnblom
- * @version 0.0 [API]
- * @version 1.0.1 [Implementation]
+ * @version 0.1 [API]
+ * @version 1.1.0 [Implementation]
  *
  * @section overview Overview
  *
@@ -150,10 +150,12 @@ extern "C" {
  *
  * @section ttl Service TTL
  *
- * A service publish via the library has a time-to-live (TTL) of 30
+ * A service publish using @c libpaf has a time-to-live (TTL) of 30
  * s. This default may be changed by setting the @c PAF_TTL
- * environment variable, beforing the paf_publish() call. The TTL must
- * be an non-negative integer.
+ * environment variable, before the paf_publish() call.
+ *
+ * The paf_set_ttl() function may be used to update the TTL for a
+ * specific service.
  *
  * @section tracing Tracing
  *
@@ -244,8 +246,8 @@ int64_t paf_publish(struct paf_context *context, const struct paf_props *props);
  *
  * This function modifies an already-published service's properties.
  *
- * The successful return of this function means the changes has been
- * commited in the supplied context, but does not mean they have
+ * The successful return of this function means the changes have been
+ * commited to the supplied context, but does not mean they have
  * propagated further (i.e to the server or to any other client,
  * including subscriptions issued via this context).
  *
@@ -270,6 +272,26 @@ int paf_modify(struct paf_context *context, int64_t service_id,
                const struct paf_props *props);
 
 /**
+ * Change service TTL.
+ *
+ * This function modifies an already-published service's time to live
+ * (TTL) setting.
+ *
+ * The successful return of this function means the change has been
+ * committed in the supplied context. It may or may not have
+ * propagated further (i.e to the server or to any other client).
+ *
+ * Only services published using the supplied @p context may be
+ * modified.
+ *
+ * @param[in] context A reference to the service's domain.
+ * @param[in] service_id The id of the service as returned by paf_publish().
+ * @param[in] ttl A non-negative integer specifying the new TTL (in s).
+ *
+ */
+void paf_set_ttl(struct paf_context *context, int64_t service_id, int64_t ttl);
+
+/**
  * Unpublish a service.
  *
  * This function allows the application to inform the library of a
@@ -278,7 +300,7 @@ int paf_modify(struct paf_context *context, int64_t service_id,
  *
  * In case the service is currently published in a server, it may not
  * yet have been removed at the time of paf_unpublish() call
- * completion. There might not event be a connection to the server
+ * completion. There might not even be a connection to the server
  * (where the service may still be lingering in an orphan state).
  *
  * Only services published using the supplied @p context may be

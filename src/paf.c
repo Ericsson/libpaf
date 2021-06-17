@@ -350,6 +350,20 @@ int paf_modify(struct paf_context *ctx, int64_t service_id,
     return 0;
 }
 
+void paf_set_ttl(struct paf_context *ctx, int64_t service_id, int64_t ttl)
+{
+    verify_normal_calls_allowed(ctx);
+
+    assert(ttl >= 0);
+
+    struct service *service = sd_get_service(ctx->sd, service_id);
+    assert(service != NULL);
+
+    log_ctx_set_ttl(ctx, service->service_id, service->ttl, ttl);
+
+    sd_modify_service(ctx->sd, service_id, NULL, &ttl);
+}
+
 void paf_unpublish(struct paf_context *ctx, int64_t service_id)
 { 
     verify_normal_calls_allowed(ctx);

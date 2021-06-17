@@ -4,6 +4,7 @@ global:
 	paf_attach;
 	paf_publish;
 	paf_modify;
+	paf_set_ttl;
 	paf_unpublish;
 	paf_subscribe;
 	paf_unsubscribe;

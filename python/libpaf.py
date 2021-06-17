@@ -106,6 +106,10 @@ paf_modify_c = paf_c.paf_modify
 paf_modify_c.restype = c_int
 paf_modify_c.argtypes = [c_void_p, c_int64, c_void_p]
 
+paf_set_ttl_c = paf_c.paf_set_ttl
+paf_set_ttl_c.restype = None
+paf_set_ttl_c.argtypes = [c_void_p, c_int64, c_int64]
+
 paf_unpublish_c = paf_c.paf_unpublish
 paf_unpublish_c.restype = c_int
 paf_unpublish_c.argtypes = [c_void_p, c_int64]
@@ -184,6 +188,13 @@ class Context:
             return rc
         finally:
             paf_props_destroy_c(c_props)
+    @_assure_attached
+    def set_ttl(self, service_id, new_ttl):
+        if not service_id in self.publications:
+            raise Error("unknown service id: %d" % service_id)
+        if new_ttl < 0:
+            raise Error("TTL must be non-negative integer")
+        paf_set_ttl_c(self.paf_context, service_id, new_ttl)
     @_assure_attached
     def unpublish(self, service_id):
         if not service_id in self.publications:
