@@ -4,9 +4,13 @@ Pathfinder is a light-weight service discovery system.
 
 The Pathfinder Client Library `libpaf` is a C library used to access
 one or more Pathfinder service discovery domains, either as a service
-producer or consumer.
+producer or consumer. The library is an implementation of the
+[Pathfinder
+protocol](https://github.com/Ericsson/paf/blob/master/doc/PROTOCOL.md)
+version 2.
 
-For more information, see the Pathfinder server README.
+For more detailed information, see the [Pathfinder
+server](https://github.com/Ericsson/paf/blob/master/README.md).
 
 ## Installation
 
