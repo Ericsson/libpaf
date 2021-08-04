@@ -18,11 +18,11 @@ TRACEPOINT_EVENT(
     com_ericsson_paf,
     paf_debug,
     TP_ARGS(
-	    const char *, domain,
+	    const char *, context,
 	    const char *, msg
     ),
     TP_FIELDS(
-	      ctf_string(domain, domain)
+	      ctf_string(context, context)
 	      ctf_string(msg, msg)
     )
 )
@@ -31,11 +31,11 @@ TRACEPOINT_EVENT(
     com_ericsson_paf,
     paf_error,
     TP_ARGS(
-	    const char *, domain,
+	    const char *, context,
 	    const char *, msg
     ),
     TP_FIELDS(
-	      ctf_string(domain, domain)
+	      ctf_string(context, context)
 	      ctf_string(msg, msg)
     )
 )
