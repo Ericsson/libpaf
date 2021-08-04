@@ -42,7 +42,7 @@ struct ptimer *ptimer_create(clockid_t clk_id, int epoll_fd,
     *timer = (struct ptimer) {
 	.clk_id = clk_id,
 	.fd = fd,
-	.log_ref = ut_asprintf("%s clk_id %d timer fd: %d", log_ref,
+	.log_ref = ut_asprintf("%s clk_id: %d timer fd: %d", log_ref,
 			       clk_id, fd)
     };
     epoll_reg_init(&timer->epoll_reg, epoll_fd, log_ref);

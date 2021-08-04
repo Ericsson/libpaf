@@ -40,7 +40,7 @@ const char *sd_change_type_str(enum sd_change_type type)
     }
 }
 
-struct sd *sd_create(const char *log_ctx)
+struct sd *sd_create(const char *log_ref)
 {
     struct sd *sd = ut_malloc(sizeof(struct sd));
 
@@ -48,7 +48,7 @@ struct sd *sd_create(const char *log_ctx)
     LIST_INIT(&sd->subs);
     LIST_INIT(&sd->listeners);
 
-    sd->log_ctx = log_ctx;
+    sd->log_ref = log_ref;
 
     return sd;
 }
@@ -131,7 +131,7 @@ int64_t sd_add_sub(struct sd *sd, const char *filter_str,
 {
     int64_t sub_id = ut_rand_id();
     struct sub *sub =
-        sub_create(sub_id, filter_str, sd->log_ctx, match_cb, user);
+        sub_create(sub_id, filter_str, sd->log_ref, match_cb, user);
 
     LIST_INSERT_HEAD(&sd->subs, sub, entry);
 

@@ -197,7 +197,7 @@ struct paf_context *paf_attach(const char *domain)
 	.state = ctx_state_operational,
 	.mono_timer = mono_timer,
 	.rt_timer = rt_timer,
-        .sd = sd_create(ctx_domain),
+        .sd = sd_create(log_ref),
         .sd_tmo = -1,
 	.rescan_period = ut_frandomize(conf_get_rescan_period()),
 	.rescan_tmo = -1,

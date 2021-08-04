@@ -49,7 +49,7 @@ struct sd
     struct sub_list subs;
     struct sd_listener_list listeners;
 
-    const char *log_ctx;
+    const char *log_ref;
 };
 
 struct sd *sd_create(const char *log_ctx);
