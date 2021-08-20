@@ -43,7 +43,7 @@ static int input_is_current(struct input *input, char expected)
 {
     int actual = input_current(input);
     if (actual < 0)
-        return 1;
+        return -1;
 
     return actual == expected;
 }
