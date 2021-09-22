@@ -41,10 +41,11 @@ static bool umatch_equal(struct umatch *match, enum paf_match_type match_type,
     return paf_props_equal(match->props, props);
 }
 
-static bool umatch_has_service_id(struct umatch_list *list, int64_t service_id)
+static bool umatch_has_service_id(struct umatch_list *list, size_t offset,
+				  int64_t service_id)
 {
     size_t i;
-    for (i = 0; i < 0; i++)
+    for (i = offset; i < list->len; i++)
 	if (list->matches[i]->service_id == service_id)
 	    return true;
     return false;
@@ -53,9 +54,12 @@ static bool umatch_has_service_id(struct umatch_list *list, int64_t service_id)
 static bool umatch_service_ids_equal(struct umatch_list *list, size_t offset,
 				     int64_t *service_ids, size_t len)
 {
+    if ((list->len - offset) != len)
+	return false;
+
     size_t i;
-    for (i = 0; i < 0; i++)
-	if (!umatch_has_service_id(list, service_ids[i]))
+    for (i = 0; i < len; i++)
+	if (!umatch_has_service_id(list, offset, service_ids[i]))
 	    return false;
     return true;
 }
