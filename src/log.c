@@ -113,14 +113,14 @@ void log_vaprintf(char *buf, size_t capacity, const char *format, va_list ap)
 
     assert (len < capacity);
 
-    size_t left = capacity - len - 1;
+    ssize_t left = capacity - len - 1;
 
     if (left == 0)
         return;
 
     int rc = vsnprintf(buf+len, left, format, ap);
     if (rc > left)
-        rc = left;
+        left = rc;
 
     buf[len+left] = '\0';
 }
