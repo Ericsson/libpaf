@@ -133,7 +133,7 @@ static void rescan_domain_file(struct paf_context *ctx)
 
     /* create links added to the domains file, or for which the
        configuration has changed */
-    ssize_t i;
+    size_t i;
     for (i = 0; i < conf->num_servers; i++) {
 	const struct server_conf *server = conf->servers[i];
 	if (!has_link(ctx, server))

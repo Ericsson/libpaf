@@ -149,7 +149,7 @@ double ut_frandomize(double d)
 }
 
 ssize_t ut_read_file(int fd, void* buf, size_t capacity) {
-    ssize_t offset = 0;
+    size_t offset = 0;
     do {
         int bytes_read = read(fd, buf+offset, capacity-offset);
         if (bytes_read < 0)

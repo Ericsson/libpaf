@@ -29,6 +29,7 @@ libpaf_la_SOURCES = src/util.c src/epoll_reg.c src/ptimer.c src/log.c \
 libpaf_la_LDFLAGS = -Wl,--version-script=$(srcdir)/src/libpaf.vs \
 	-version-info $(PAF_VERSION_CURRENT):$(PAF_VERSION_REVISION):$(PAF_VERSION_AGE)
 libpaf_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)/src
+libpaf_la_CFLAGS = $(AM_CFLAGS) -Wextra
 
 if LTTNG
 libpaf_la_SOURCES += src/paf_lttng.c

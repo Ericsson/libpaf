@@ -22,7 +22,7 @@
 #include "domain_conf.h"
 
 static int get_domain_filename(const char *domain, char *filename,
-			       size_t capacity)
+			       ssize_t capacity)
 {
     const char *domains_dir = conf_get_domains_dir();
 

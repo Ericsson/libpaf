@@ -45,7 +45,8 @@ static void app_match(enum paf_match_type match_type, int64_t service_id,
     sub->match_cb(match_type, service_id, props, sub->user);
 }
 
-static void check_disappearence(struct sub *sub, struct match *match)
+static void check_disappearence(struct sub *sub __attribute__((unused)),
+				struct match *match)
 {
     if (match_has_disappeared(match)) {
 	LIST_REMOVE(match, entry);

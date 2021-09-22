@@ -195,7 +195,8 @@ struct sd_listener *sd_add_listener(struct sd *sd, sd_listener_cb cb,
     return listener;
 }
 
-void sd_remove_listener(struct sd *sd, struct sd_listener *listener)
+void sd_remove_listener(struct sd *sd __attribute__((unused)),
+			struct sd_listener *listener)
 {
     LIST_REMOVE(listener, entry);
     ut_free(listener);

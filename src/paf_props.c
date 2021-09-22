@@ -141,10 +141,6 @@ size_t paf_props_get(const struct paf_props *props, const char *prop_name,
     return len;
 }
 
-typedef void (*paf_props_foreach_cb)(const char *prop_name,
-                                     const struct paf_value *prop_value,
-                                     void *user);
-
 void paf_props_foreach(const struct paf_props *props, paf_props_foreach_cb cb,
                        void *user)
 {

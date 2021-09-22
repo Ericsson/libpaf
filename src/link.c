@@ -244,7 +244,8 @@ static void sync_service(struct link *link, struct relay *service_relay);
 static void unsync_service(struct link *link, struct relay *service_relay);
 
 static void publish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                                void **args, void **optargs, void *user)
+                                void **args __attribute__((unused)),
+				void **optargs, void *user)
 {
     struct link *link = user;
 
@@ -278,7 +279,8 @@ static void sync_sub(struct link *link, struct relay *sub_relay);
 static void unsync_sub(struct link *link, struct relay *sub_relay);
 
 static void unpublish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                                  void **args, void **optargs, void *user)
+                                  void **args __attribute__((unused)),
+				  void **optargs, void *user)
 {
     struct link *link = user;
 
@@ -374,7 +376,8 @@ static void subscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
 }
 
 static void unsubscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                                    void **args, void **optargs, void *user)
+                                    void **args __attribute__((unused)),
+				    void **optargs, void *user)
 {
     struct link *link = user;
 

@@ -18,7 +18,7 @@
 	elem;								\
     })
 
-#define LIST_ELEM_EQ(a, b) (a == b)
+#define LIST_ELEM_EQ(a, b) ((a) == (b))
 
 #define LIST_FIND(list, needle_name, needle_value, field)		\
     LIST_FIND_FUN(list, needle_name, needle_value, field, LIST_ELEM_EQ)
