@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -24,6 +25,16 @@ char *ut_strdup(const char *str);
 
 char *ut_asprintf(const char *fmt, ...)
     __attribute__ ((format (printf, 1, 2)));
+
+void ut_aprintf(char *buf, size_t capacity, const char *format, ...)
+    __attribute__ ((format (printf, 3, 4)));
+void ut_vaprintf(char *buf, size_t capacity, const char *format, va_list ap)
+    __attribute__ ((format (printf, 3, 0)));
+
+int ut_snprintf(char *buf, size_t capacity, const char *format, ...)
+    __attribute__ ((format (printf, 3, 4)));
+int ut_vsnprintf(char *buf, size_t capacity, const char *format, va_list ap)
+    __attribute__ ((format (printf, 3, 0)));
 
 bool ut_timespec_lte(const struct timespec *a, const struct timespec *b);
 double ut_timespec_to_f(const struct timespec *ts);

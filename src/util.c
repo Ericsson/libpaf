@@ -87,6 +87,51 @@ char *ut_asprintf(const char *fmt, ...)
     return str;
 }
 
+void ut_aprintf(char *buf, size_t capacity, const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    ut_vaprintf(buf, capacity, format, ap);
+    va_end(ap);
+}
+
+void ut_vaprintf(char *buf, size_t capacity, const char *format, va_list ap)
+{
+    size_t len = strlen(buf);
+
+    assert (len < capacity);
+
+    ssize_t left = capacity - len - 1;
+
+    if (left == 0)
+        return;
+
+    ut_vsnprintf(buf + len, left, format, ap);
+}
+
+int ut_snprintf(char *buf, size_t capacity, const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+
+    int rc = ut_vsnprintf(buf, capacity, format, ap);
+
+    va_end(ap);
+
+    return rc;
+}
+
+int ut_vsnprintf(char *buf, size_t capacity, const char *format, va_list ap)
+{
+    int rc = vsnprintf(buf, capacity, format, ap);
+
+    /* guarantee NUL-terminated strings */
+    if (rc >= (ssize_t)capacity)
+	buf[capacity - 1] = '\0';
+
+    return rc;
+}
+
 bool ut_timespec_lte(const struct timespec *a, const struct timespec *b)
 {
     if (a->tv_sec < b->tv_sec)

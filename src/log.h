@@ -25,9 +25,6 @@ void __log_event(enum log_type type, const char *file, int line,
                  const char *function, const char *log_ref,
                  const char *format, ...);
 
-void log_aprintf(char *buf, size_t capacity, const char *format, ...);
-void log_vaprintf(char *buf, size_t capacity, const char *format, va_list ap);
-
 void log_aprint_props(char *buf, size_t capacity,
                       const struct paf_props *props);
 

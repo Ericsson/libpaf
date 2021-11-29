@@ -30,18 +30,17 @@
 #define log_ctx_link_setup(ctx, server, link_id)			\
     do {                                                                \
 	char buf[1024];							\
-	buf[0] = '\0';							\
-	log_aprintf(buf, sizeof(buf), "Setting up link id %d with domain " \
-		    "address %s.", link_id, (server)->addr);		\
+	ut_snprintf(buf, sizeof(buf), "Setting up link id %"PRId64" "	\
+		    "with domain address %s.", link_id, (server)->addr); \
 	if (server->cert_file != NULL)					\
-	    log_aprintf(buf, sizeof(buf), " Certificate file: \"%s\".",	\
-			server->cert_file);				\
+	    ut_aprintf(buf, sizeof(buf), " Certificate file: \"%s\".",	\
+		       server->cert_file);				\
 	if (server->key_file != NULL)					\
-	    log_aprintf(buf, sizeof(buf), " Key file: \"%s\".",		\
-			server->key_file);				\
+	    ut_aprintf(buf, sizeof(buf), " Key file: \"%s\".",		\
+		       server->key_file);				\
 	if (server->tc_file != NULL)					\
-	    log_aprintf(buf, sizeof(buf), " Trusted CA file: \"%s\".",	\
-			server->tc_file);				\
+	    ut_aprintf(buf, sizeof(buf), " Trusted CA file: \"%s\".",	\
+		       server->tc_file);				\
 	log_ctx_debug(ctx, buf);					\
     } while (0)
 
@@ -56,8 +55,8 @@
     do {                                                                \
         char buf[1024];                                                 \
         buf[0] = '\0';                                                  \
-        log_aprintf(buf, sizeof(buf), "Publishing service id 0x%"PRIx64 \
-                    " with props ", service_id);                        \
+        ut_aprintf(buf, sizeof(buf), "Publishing service id 0x%"PRIx64 \
+		   " with props ", service_id);				\
         log_aprint_props(buf, sizeof(buf), props);                      \
         log_ctx_debug(ctx, "%s.", buf);					\
     } while (0)
@@ -66,10 +65,10 @@
     do {                                                                \
         char buf[1024];                                                 \
         buf[0] = '\0';                                                  \
-        log_aprintf(buf, sizeof(buf), "Modifying service id 0x%"PRIx64  \
-                    " props from ", service_id);			\
+        ut_aprintf(buf, sizeof(buf), "Modifying service id 0x%"PRIx64  \
+		   " props from ", service_id);				\
         log_aprint_props(buf, sizeof(buf), old_props);                  \
-        log_aprintf(buf, sizeof(buf), " to ");                          \
+        ut_aprintf(buf, sizeof(buf), " to ");                          \
         log_aprint_props(buf, sizeof(buf), new_props);                  \
         log_ctx_debug(ctx, "%s.", buf);					\
     } while (0)

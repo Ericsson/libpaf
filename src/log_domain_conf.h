@@ -36,11 +36,11 @@
 			  (json_err)->line, (json_err)->column,	       \
 			  (json_err)->text)
 
-#define log_domain_conf_parse_error(domain, filename, fmt, ...)		\
+#define log_domain_conf_parse_error(domain, filename, reason, ...)	\
     do {								\
 	char buf[1024];							\
-	snprintf(buf, sizeof(buf), "Error parsing domain file "		\
-		 "\"%s\": %s.", filename, fmt);				\
+	ut_snprintf(buf, sizeof(buf), "Error parsing domain file "	\
+		    "\"%s\": %s.", filename, reason);			\
 	log_domain_conf_debug(domain, buf, ##__VA_ARGS__);		\
     } while (0)
 

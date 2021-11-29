@@ -19,20 +19,19 @@
 			     props, ttl, orphan_since, match_type_str)	\
     do {                                                                \
         char buf[1024];							\
-	buf[0] = '\0';							\
-	log_aprintf(buf, sizeof(buf), "Received server type \"%s\" "	\
+	ut_snprintf(buf, sizeof(buf), "Received server type \"%s\" "	\
 		    "match for service id 0x%"PRIx64".", match_type_str, \
 		    service_id);					\
 	if (generation != NULL)						\
-	    log_aprintf(buf, sizeof(buf), " Generation: %"PRId64".",	\
-			*generation);					\
+	    ut_aprintf(buf, sizeof(buf), " Generation: %"PRId64".",	\
+		       *generation);					\
 	if (ttl != NULL)						\
-	    log_aprintf(buf, sizeof(buf), " TTL: %"PRId64".", *ttl);	\
+	    ut_aprintf(buf, sizeof(buf), " TTL: %"PRId64".", *ttl);	\
 	if (orphan_since != NULL)					\
-	    log_aprintf(buf, sizeof(buf), " Orphan since: %f.",		\
-			*orphan_since);					\
+	    ut_aprintf(buf, sizeof(buf), " Orphan since: %f.",		\
+		       *orphan_since);					\
         if (props != NULL) {                                            \
-            log_aprintf(buf, sizeof(buf), " Props: ");			\
+            ut_aprintf(buf, sizeof(buf), " Props: ");			\
             log_aprint_props(buf, sizeof(buf), props);                  \
 	    log_sub_debug(sub, "%s.", buf);				\
         }                                                               \
@@ -42,11 +41,11 @@
     do {                                                                \
         char buf[1024];							\
 	buf[0] = '\0';							\
-	log_aprintf(buf, sizeof(buf), "Dispatching type \"%s\" "	\
-		    "application-level match for service id 0x%"	\
-		    PRIx64".", match_type_str, service_id);		\
+	ut_aprintf(buf, sizeof(buf), "Dispatching type \"%s\" "	\
+		   "application-level match for service id 0x%"		\
+		   PRIx64".", match_type_str, service_id);		\
         if (props != NULL) {                                            \
-            log_aprintf(buf, sizeof(buf), " Props: ");			\
+            ut_aprintf(buf, sizeof(buf), " Props: ");			\
             log_aprint_props(buf, sizeof(buf), props);                  \
 	    log_sub_debug(sub, "%s.", buf);				\
         }                                                               \
