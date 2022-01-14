@@ -6,8 +6,8 @@
 #undef TRACEPOINT_PROVIDER
 #define TRACEPOINT_PROVIDER com_ericsson_paf
 
-#undef TRACEPOINT_INCLUDE_FILE
-#define TRACEPOINT_INCLUDE_FILE ./paf_lttng.h
+#undef TRACEPOINT_INCLUDE
+#define TRACEPOINT_INCLUDE "./paf_lttng.h"
 
 #if !defined(_PAF_LTTNG_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
 #define _PAF_LTTNG_H

@@ -34,6 +34,7 @@ libpaf_la_CFLAGS = $(AM_CFLAGS) -Wextra
 if LTTNG
 libpaf_la_SOURCES += src/paf_lttng.c
 libpaf_la_CPPFLAGS += -DPAF_LTTNG
+libpaf_la_LDFLAGS += -llttng-ust
 endif
 
 UTEST_SOURCES = test/utest/utest.c test/utest/utestreport.c \
