@@ -53,9 +53,9 @@
     log_link_error(link, "Link unable to handle TLS configuration: "	\
 		   "build-time libxcm too old.")
 
-#define log_link_xcm_connected(link, remote_addr, local_addr)		\
-    log_link_debug(link, "Established XCM connection to %s "		\
-		   "(local address %s).", remote_addr, local_addr)
+#define log_link_xcm_initiated(link, remote_addr)			\
+    log_link_debug(link, "Successfully initiated XCM connection to %s.", \
+		   remote_addr)
 
 #define log_link_operational(link, protocol_version)			\
     log_link_debug(link, "Operational using protocol "			\

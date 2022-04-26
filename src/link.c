@@ -823,8 +823,7 @@ static void try_connect(struct link *link)
 	return;
     }
 
-    log_link_xcm_connected(link, link->server->addr,
-			   xcm_local_addr(link->conn));
+    log_link_xcm_initiated(link, link->server->addr);
 
     epoll_reg_add(&link->epoll_reg, xcm_fd(link->conn), EPOLLIN);
 
