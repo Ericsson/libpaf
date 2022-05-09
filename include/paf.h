@@ -120,9 +120,9 @@ extern "C" {
  * The same configuration (minus the certificate-related
  * configuration), but in the newline-separated format:
  * @code
- * "tls:1.2.3.4:4444"
- * "tls:5.6.7.8:8888"
- * "ux:foo"
+ * tls:1.2.3.4:4444
+ * tls:5.6.7.8:8888
+ * ux:foo
  * @endcode
  *
  * @subsubsection rescan Domain File Rescan
