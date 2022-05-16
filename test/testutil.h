@@ -23,4 +23,10 @@ int tu_randint(int min, int max);
 bool tu_randbool(void);
 void tu_randblk(void *buf, int len);
 
+int tu_add_net_ns(const char *ns_name);
+int tu_del_net_ns(const char *ns_name);
+
+bool tu_is_root(void);
+bool tu_has_sys_admin_capability(void);
+
 #endif

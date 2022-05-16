@@ -40,6 +40,24 @@
 #define log_link_destroy(link)						\
     log_link_debug(link, "Link destroyed.")
 
+#define log_link_net_ns_entered(link, ns_name)				\
+    log_link_debug(link, "Entered network namespace \"%s\".", ns_name)
+
+#define log_link_net_ns_returned(link, ns_name)				\
+    log_link_debug(link, "Returned from network namespace \"%s\".", ns_name)
+
+#define log_link_net_ns_op_failed(link, op_name, ns_name, net_ns_errno) \
+    log_link_debug(link, "Failed to %s network namespace \"%s\"; "	\
+		   "errno %d (%s).", op_name, ns_name, net_ns_errno,	\
+		   strerror(net_ns_errno))
+
+#define log_link_net_ns_enter_failed(link, ns_name, net_ns_errno)	\
+    log_link_net_ns_op_failed(link, "enter", ns_name, net_ns_errno)
+
+#define log_link_net_ns_return_failed(link, ns_name, net_ns_errno)	\
+    log_link_net_ns_op_failed(link, "return from", ns_name,		\
+			      net_ns_errno)
+
 #define log_link_xcm_op_failed(link, op_desc, xcm_addr, xcm_errno)	\
     log_link_debug(link, "XCM %s to %s "				\
 		   "failed; errno %d (%s).", op_desc, xcm_addr, xcm_errno, \

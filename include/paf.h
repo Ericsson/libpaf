@@ -85,7 +85,15 @@ extern "C" {
  * with a key "servers". The value of "servers" must be an array of
  * zero or more JSON objects, each representing a server.
  *
- * The server object must have a key "address", with a string value.
+ * The server object must have a key "address", with the server's
+ * address in XCM format as its value.
+ *
+ * A server object may include a key "networkNamespace". If present,
+ * the library will make sure the outoing transport layer connection
+ * originates from a Linux network namespace named per the key's
+ * value. To switch between network namespaces, the process needs the
+ * @c CAP_SYS_ADMIN capability. The network namespace needs to be
+ * named as per iproute2 conventions.
  *
  * In case the transport protocol uses TLS, three optional keys may be
  * present in the server object:
@@ -111,17 +119,23 @@ extern "C" {
  *       "address": "tls:5.6.7.8:8888"
  *     },
  *     {
+ *       "address": "tcp:fqdn:1111",
+ *       "networkNamespace": "oam"
+ *     },
+ *     {
  *       "address": "ux:foo"
  *     }
  *   ]
  * }
  * @endcode
  * 
- * The same configuration (minus the certificate-related
- * configuration), but in the newline-separated format:
+ * The same configuration (minus the network namespace and the
+ * certificate-related configuration), but in the newline-separated
+ * format:
  * @code
  * tls:1.2.3.4:4444
  * tls:5.6.7.8:8888
+ * tcp:fqdn:1111
  * ux:foo
  * @endcode
  *

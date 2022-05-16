@@ -84,12 +84,15 @@ TESTCASE(domain_conf, read_file)
     CHK(conf == NULL);
     CHKERRNOEQ(0);
 
-    tu_executef("chmod a-rwx %s/%s", domain_dir, domain_name);
-    mtime.tv_sec = time(NULL) - 1;
-    conf = domain_conf_read(domain_name, &mtime, NULL);
-    CHK(conf == NULL);
-    CHKERRNOEQ(EACCES);
-    tu_executef("chmod u+rw %s/%s", domain_dir, domain_name);
+    /* this test doesn't work for root, since it can read all files */
+    if (getuid() != 0) {
+	tu_executef("chmod a-rwx %s/%s", domain_dir, domain_name);
+	mtime.tv_sec = time(NULL) - 1;
+	conf = domain_conf_read(domain_name, &mtime, NULL);
+	CHK(conf == NULL);
+	CHKERRNOEQ(EACCES);
+	tu_executef("chmod u+rw %s/%s", domain_dir, domain_name);
+    }
 
     return UTEST_SUCCESS;
 }
@@ -98,6 +101,7 @@ TESTCASE(domain_conf, json_read_file)
 {
     const char *addr0 = "ux:foo";
     const char *addr1 = "tls:127.0.0.1:4711";
+    const char *net_ns = "test_ns";
     const char *addr2 = "tls:127.0.42.1:42";
     const char *cert_file = "/asdf/cert.pem";
     const char *key_file = "/asdf/key.pem";
@@ -114,7 +118,8 @@ TESTCASE(domain_conf, json_read_file)
 		"      \"address\": \"%s\"\n"
 		"    },\n"
 		"    {\n"
-		"      \"address\": \"%s\"\n"
+		"      \"address\": \"%s\",\n"
+		"      \"networkNamespace\": \"%s\"\n"
 		"    },\n"
 		"    {\n"
 		"      \"address\": \"%s\",\n"
@@ -123,23 +128,26 @@ TESTCASE(domain_conf, json_read_file)
 		"      \"tlsTrustedCaFile\": \"%s\"\n"
 		"    }\n"
 		"  ]\n"
-		"}\n' > %s/%s", addr0, addr1, addr2, cert_file, key_file,
-		tc_file, domain_dir, domain_name);
+		"}\n' > %s/%s", addr0, addr1, net_ns, addr2,
+		cert_file, key_file, tc_file, domain_dir, domain_name);
 
     struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
     CHK(conf != NULL);
     CHKINTEQ(conf->num_servers, 3);
 
+    CHKNULL(conf->servers[0]->net_ns);
     CHKSTREQ(conf->servers[0]->addr, addr0);
     CHKNULL(conf->servers[0]->cert_file);
     CHKNULL(conf->servers[0]->key_file);
     CHKNULL(conf->servers[0]->tc_file);
 
+    CHKSTREQ(conf->servers[1]->net_ns, net_ns);
     CHKSTREQ(conf->servers[1]->addr, addr1);
     CHKNULL(conf->servers[1]->cert_file);
     CHKNULL(conf->servers[1]->key_file);
     CHKNULL(conf->servers[1]->tc_file);
 
+    CHKNULL(conf->servers[0]->net_ns);
     CHKSTREQ(conf->servers[2]->addr, addr2);
     CHKSTREQ(conf->servers[2]->cert_file, cert_file);
     CHKSTREQ(conf->servers[2]->key_file, key_file);

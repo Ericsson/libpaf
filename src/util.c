@@ -6,6 +6,8 @@
 #include <assert.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -230,3 +232,52 @@ bool ut_str_ary_has(char * const *ary, size_t ary_len, const char *needle)
     return false;
 }
 
+#define NETNS_NAME_DIR "/run/netns"
+
+static int get_ns_fd(const char *ns) {
+    char path[strlen(NETNS_NAME_DIR)+strlen(ns)+2];
+    snprintf(path, sizeof(path), "%s/%s", NETNS_NAME_DIR, ns);
+    return open(path, O_RDONLY, 0);
+}
+
+int ut_net_ns_enter(const char *ns_name)
+{
+    char old_ns[PATH_MAX];
+    /* we can't use "/proc/self/ns/net" here, because it points
+       towards the *process* (i.e. main thread's ns), which might not
+       be the current thread's ns */
+    snprintf(old_ns, sizeof(old_ns), "/proc/%d/ns/net", gettid());
+
+    int old_ns_fd = open(old_ns, O_RDONLY, 0);
+    if (old_ns_fd < 0)
+	goto err;
+
+    int new_ns_fd = get_ns_fd(ns_name);
+
+    if (new_ns_fd < 0)
+	goto err_close_old;
+
+    if (setns(new_ns_fd, CLONE_NEWNET) < 0)
+	goto err_close_all;
+
+    close(new_ns_fd);
+
+    return old_ns_fd;
+
+ err_close_all:
+    close(new_ns_fd);
+ err_close_old:
+    close(old_ns_fd);
+ err:
+    return -1;
+}
+
+int ut_net_ns_return(int old_ns_fd)
+{
+    if (setns(old_ns_fd, CLONE_NEWNET) < 0)
+	return -1;
+
+    close(old_ns_fd);
+
+    return 0;
+}

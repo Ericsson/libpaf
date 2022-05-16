@@ -84,23 +84,12 @@ int tu_waitstatus(pid_t p)
     return 0;
 }
 
-static uint32_t rand32(void)
-{
-    uint32_t r;
-
-    tu_randblk(&r, sizeof(r));
-
-    return r;
-}
-
 int tu_randint(int min, int max)
 {
-    if (min == max)
-	return min;
+    unsigned int r;
+    tu_randblk(&r, sizeof(r));
 
-    int diff = max - min;
-
-    return min + (rand32() % diff);
+    return min + r % (max - min + 1);
 }
 
 bool tu_randbool(void)
@@ -120,4 +109,44 @@ void tu_randblk(void *buf, int len)
 	buf += batch;
 	len -= batch;
     }
+}
+
+static int ns_conf_lo(const char *ns_name)
+{
+    if (tu_executef_es("ip -n %s addr add 127.0.0.1/8 dev lo", ns_name) != 0)
+	return -1;
+    if (tu_executef_es("ip -n %s addr add ::1/128 dev lo", ns_name) != 0)
+	return -1;
+    if (tu_executef_es("ip -n %s link set lo up", ns_name) != 0)
+	return -1;
+    return 0;
+}
+
+int tu_add_net_ns(const char *ns_name)
+{
+    tu_executef_es("ip netns del %s 2>/dev/null", ns_name);
+
+    if (tu_executef_es("ip netns add %s", ns_name) != 0)
+	return -1;
+
+    if (ns_conf_lo(ns_name) < 0)
+	return -1;
+
+    return 0;
+}
+
+int tu_del_net_ns(const char *ns_name)
+{
+    return tu_executef_es("ip netns del %s 2>/dev/null", ns_name) != 0 ?
+	-1 : 0;
+}
+
+bool tu_is_root(void)
+{
+    return getuid() == 0;
+}
+
+bool tu_has_sys_admin_capability(void)
+{
+    return tu_executef_es("capsh --has-p=cap_sys_admin 2>/dev/null") == 0;
 }

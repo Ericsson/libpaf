@@ -32,6 +32,9 @@ static bool is_in_valgrind(void)
 #define CERT_BASE_DIR "./test/cert"
 
 #define SERVER_CERT_DIR CERT_BASE_DIR "/server"
+#define SERVER_CERT SERVER_CERT_DIR "/cert.pem"
+#define SERVER_KEY SERVER_CERT_DIR "/key.pem"
+#define SERVER_TC SERVER_CERT_DIR "/tc.pem"
 
 #define CLIENT_CERT_DIR CERT_BASE_DIR "/client"
 #define CLIENT_CERT CLIENT_CERT_DIR "/cert.pem"
@@ -43,7 +46,7 @@ static bool is_in_valgrind(void)
 #define UNTRUSTED_CLIENT_KEY UNTRUSTED_CLIENT_CERT_DIR "/key.pem"
 #define UNTRUSTED_CLIENT_TC UNTRUSTED_CLIENT_CERT_DIR "/tc.pem"
 
-static pid_t run_server(const char *addr)
+static pid_t run_server(const char *net_ns, const char *addr)
 {
     pid_t p = fork();
 
@@ -52,6 +55,9 @@ static pid_t run_server(const char *addr)
     else if (p == 0) {
 
 	if (setenv("XCM_TLS_CERT", SERVER_CERT_DIR, 1) < 0)
+	    exit(EXIT_FAILURE);
+
+	if (net_ns != NULL && ut_net_ns_enter(net_ns) < 0)
 	    exit(EXIT_FAILURE);
 
 #ifdef PAFD_DEBUG
@@ -71,24 +77,33 @@ static char *domain_name;
 static char *domains_filename;
 
 struct server {
+    char *net_ns;
     char *addr;
     pid_t pid;
 } server;
 
 static struct server servers[NUM_SERVERS];
 
-static int assure_server_up(const char *addr);
+static int assure_server_up(struct server *server);
 
-static int start_server(struct server *server)
+static void server_clear(struct server *server)
+{
+    ut_free(server->net_ns);
+    ut_free(server->addr);
+    server->net_ns = NULL;
+    server->addr = NULL;
+}
+
+static int server_start(struct server *server)
 {
     if (server->pid > 0)
 	return UTEST_SUCCESS;
 
-    pid_t server_pid = run_server(server->addr);
+    pid_t server_pid = run_server(server->net_ns, server->addr);
 
     if (server_pid < 0)
         return UTEST_FAIL;
-    if (assure_server_up(server->addr) < 0)
+    if (assure_server_up(server) < 0)
         return UTEST_FAIL;
 
     server->pid = server_pid;
@@ -100,7 +115,7 @@ static int start_servers(void)
 {
     int i;
     for (i = 0; i < NUM_SERVERS; i++) {
-	int rc = start_server(&servers[i]);
+	int rc = server_start(&servers[i]);
 	if (rc < 0)
 	    return rc;
     }
@@ -124,7 +139,7 @@ static int signal_servers(int signo)
     return rc;
 }
 
-static int stop_server(struct server *server)
+static int server_stop(struct server *server)
 {
     if (signal_server(server, SIGTERM) < 0)
 	return -1;
@@ -144,7 +159,7 @@ static int stop_servers(void)
 
     for (i = 0; i < NUM_SERVERS; i++) {
 	struct server *server = &servers[i];
-	if (server->pid > 0 && stop_server(server) < 0)
+	if (server->pid > 0 && server_stop(server) < 0)
 	    rc = -1;
     }
 
@@ -190,6 +205,11 @@ static char *random_addr(void)
     }
 }
 
+static char *random_net_ns(void)
+{
+    return ut_asprintf("ns-%d-%d", getpid(), tu_randint(0, INT_MAX));
+}
+
 static int write_nl_domains_file(const char *filename, struct server *servers,
 				 size_t num_servers)
 {
@@ -233,17 +253,21 @@ static int write_json_domains_file(const char *filename,
 
     int i;
     for (i = 0; i < num_servers; i++) {
-	const char *addr = servers[i].addr;
+	struct server *server = &servers[i];
 	fprintf(domains_file, "    {\n"
-		"      \"address\": \"%s\"", addr);
+		"      \"address\": \"%s\"", server->addr);
 
-	if (is_tls(addr) && cert_file != NULL)
+	if (server->net_ns != NULL)
+	    fprintf(domains_file, ",\n"
+		    "      \"networkNamespace\": \"%s\"", server->net_ns);
+
+	if (is_tls(server->addr) && cert_file != NULL)
 	    fprintf(domains_file, ",\n"
 		    "      \"tlsCertificateFile\": \"%s\"", cert_file);
-	if (is_tls(addr) && key_file != NULL)
+	if (is_tls(server->addr) && key_file != NULL)
 	    fprintf(domains_file, ",\n"
 		    "      \"tlsKeyFile\": \"%s\"", key_file);
-	if (is_tls(addr) && tc_file != NULL)
+	if (is_tls(server->addr) && tc_file != NULL)
 	    fprintf(domains_file, ",\n"
 		    "      \"tlsTrustedCaFile\": \"%s\"", tc_file);
 
@@ -264,6 +288,43 @@ static int write_json_domains_file(const char *filename,
     return 0;
 }
 
+static int cert_setup(const char *ns_name)
+{
+    int rc;
+
+    rc = tu_executef_es("cp %s %s/cert_%s.pem && "
+			"cp %s %s/key_%s.pem && "
+			"cp %s %s/tc_%s.pem",
+			CLIENT_CERT, CLIENT_CERT_DIR, ns_name,
+			CLIENT_KEY, CLIENT_CERT_DIR, ns_name,
+			CLIENT_TC, CLIENT_CERT_DIR, ns_name);
+    if (rc != 0)
+	return -1;
+
+    rc = tu_executef_es("cp %s %s/cert_%s.pem && "
+			"cp %s %s/key_%s.pem && "
+			"cp %s %s/tc_%s.pem",
+			SERVER_CERT, SERVER_CERT_DIR, ns_name,
+			SERVER_KEY, SERVER_CERT_DIR, ns_name,
+			SERVER_TC, SERVER_CERT_DIR, ns_name);
+    if (rc != 0)
+	return -1;
+
+    return 0;
+}
+
+static int cert_teardown(const char *ns_name)
+{
+    int rc = tu_executef_es("rm %s/cert_%s.pem %s/key_%s.pem %s/tc_%s.pem "
+			    "%s/cert_%s.pem %s/key_%s.pem %s/tc_%s.pem",
+			    CLIENT_CERT_DIR, ns_name, CLIENT_CERT_DIR,
+			    ns_name, CLIENT_CERT_DIR, ns_name,
+			    SERVER_CERT_DIR, ns_name, SERVER_CERT_DIR,
+			    ns_name, SERVER_CERT_DIR, ns_name);
+
+    return rc != 0 ? -1 : 0;
+}
+
 static int domain_setup(void)
 {
     domains_dir = ut_asprintf("./test/domains/%d", getpid());
@@ -273,14 +334,26 @@ static int domain_setup(void)
 
     domains_filename = ut_asprintf("%s/%s", domains_dir, domain_name);
 
+    bool use_net_ns = tu_has_sys_admin_capability() && tu_randbool();
+
     int i;
     for (i = 0; i < NUM_SERVERS; i++) {
 	struct server *server = &servers[i];
+
+	if (use_net_ns && tu_randbool()) {
+	    server->net_ns = random_net_ns();
+	    cert_setup(server->net_ns);
+	} else
+	    server->net_ns = NULL;
+
 	server->addr = random_addr();
 	server->pid = -1;
+
+	if (server->net_ns != NULL && tu_add_net_ns(server->net_ns) < 0)
+	    return UTEST_FAIL;
     }
 
-    if (tu_randbool())
+    if (tu_randbool() && !use_net_ns)
 	CHKNOERR(write_nl_domains_file(domains_filename, servers,
 				       NUM_SERVERS));
     else {
@@ -359,9 +432,18 @@ static void domain_teardown(void)
     ut_free(domains_dir);
     ut_free(domain_name);
     ut_free(domains_filename);
+
     int i;
-    for (i = 0; i < NUM_SERVERS; i++)
-	ut_free(servers[i].addr);
+    for (i = 0; i < NUM_SERVERS; i++) {
+	struct server *server = &servers[i];
+
+	if (server->net_ns != NULL) {
+	    cert_teardown(server->net_ns);
+	    tu_del_net_ns(server->net_ns);
+	}
+
+	server_clear(server);
+    }
 }
 
 static int teardown(void)
@@ -435,10 +517,18 @@ static void add_prop(const char *prop_name, const struct paf_value *prop_value,
 
 #define TCLIENT "./test/tclient.py"
 
-static int tclient(const char *addr, const char *cmd_fmt, ...)
+static int tclient(const struct server *server,
+		   const char *cmd_fmt, ...)
 {
     va_list ap;
     va_start(ap, cmd_fmt);
+
+    int old_ns_fd = -1;
+    if (server->net_ns != NULL) {
+	old_ns_fd = ut_net_ns_enter(server->net_ns);
+	if (old_ns_fd < 0)
+	    return -1;
+    }
 
     char *old_cert_dir = NULL;
 
@@ -450,7 +540,7 @@ static int tclient(const char *addr, const char *cmd_fmt, ...)
 	return -1;
 
     char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "%s %s ", TCLIENT, addr);
+    snprintf(cmd, sizeof(cmd), "%s %s ", TCLIENT, server->addr);
 
     vsnprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd),
 	      cmd_fmt, ap);
@@ -464,15 +554,18 @@ static int tclient(const char *addr, const char *cmd_fmt, ...)
     } else if (unsetenv("XCM_TLS_CERT") < 0)
 	return -1;
 
+    if (server->net_ns != NULL && ut_net_ns_return(old_ns_fd) < 0)
+	return -1;
+
     return rc;
 }
 
-static int assure_server_up(const char *addr)
+static int assure_server_up(struct server *server)
 {
-    return tclient(addr, "assure-up");
+    return tclient(server, "assure-up");
 }
 
-static int server_assure_service(const char *addr, int64_t service_id,
+static int server_assure_service(struct server *server, int64_t service_id,
 				 const struct paf_props *props)
 {
     char cmd[4096];
@@ -488,14 +581,14 @@ static int server_assure_service(const char *addr, int64_t service_id,
 
     paf_props_foreach(props, add_prop, cmd);
 
-    return tclient(addr, cmd);
+    return tclient(server, cmd);
 }
 
 static int assure_service(int64_t service_id, const struct paf_props *props)
 {
     int i;
     for (i = 0; i < NUM_SERVERS; i++) {
-	int rc = server_assure_service(servers[i].addr, service_id,
+	int rc = server_assure_service(&servers[i], service_id,
 				       props);
 	if (rc < 0)
 	    return rc;
@@ -518,16 +611,16 @@ static int wait_for_service(struct paf_context *context,
     }
 }
 
-static int server_assure_service_count(const char *addr, int count)
+static int server_assure_service_count(struct server *server, int count)
 {
-    return tclient(addr, "assure-service-count %d", count);
+    return tclient(server, "assure-service-count %d", count);
 }
 
 static int assure_service_count(int count)
 {
     int i;
     for (i = 0; i < NUM_SERVERS; i++) {
-	int rc = server_assure_service_count(servers[i].addr, count);
+	int rc = server_assure_service_count(&servers[i], count);
 	if (rc < 0)
 	    return rc;
     }
@@ -548,10 +641,10 @@ static int wait_for_service_count(struct paf_context *context, double duration,
     }
 }
 
-static int server_assure_subscription(const char *addr, int64_t sub_id,
+static int server_assure_subscription(struct server *server, int64_t sub_id,
 				      const char *filter)
 {
-    return tclient(addr, "assure-subscription %"PRIx64" '%s'", sub_id,
+    return tclient(server, "assure-subscription %"PRIx64" '%s'", sub_id,
 		   filter);
 }
 
@@ -559,7 +652,7 @@ static int assure_subscription(int64_t sub_id, const char *filter)
 {
     int i;
     for (i = 0; i < NUM_SERVERS; i++) {
-	int rc = server_assure_subscription(servers[i].addr, sub_id, filter);
+	int rc = server_assure_subscription(&servers[i], sub_id, filter);
 	if (rc < 0)
 	    return rc;
     }
@@ -915,7 +1008,7 @@ TESTCASE(paf, match_with_most_servers_down)
 
     int i;
     for (i = 0; i < (NUM_SERVERS-1); i++)
-	stop_server(&servers[i]);
+	server_stop(&servers[i]);
 
     int hits = 0;
     CHKNOERR(paf_subscribe(sub_context, "(|(name=*)(age=42))",
@@ -1378,12 +1471,17 @@ TESTCASE(paf, create_domains_file)
 
 TESTCASE(paf, change_domains_file)
 {
-    if (NUM_SERVERS == 1)
-	return UTEST_NOT_RUN;
+    struct server server_a = {
+	.addr = random_addr()
+    };
+    struct server server_b = {
+	.addr = random_addr()
+    };
 
-    CHKNOERR(start_servers());
+    CHKNOERR(server_start(&server_a));
+    CHKNOERR(server_start(&server_b));
 
-    CHKNOERR(tu_executef_es("echo '%s' > %s", servers[0].addr,
+    CHKNOERR(tu_executef_es("echo '%s' > %s", server_a.addr,
 			    domains_filename));
 
     struct paf_context *context = paf_attach(domain_name);
@@ -1395,21 +1493,27 @@ TESTCASE(paf, change_domains_file)
 
     CHKNOERR(wait_for(context, LAG));
 
-    CHKNOERR(server_assure_service(servers[0].addr, service_id, props));
-    CHK(server_assure_service(servers[1].addr, service_id, props) < 0);
+    CHKNOERR(server_assure_service(&server_a, service_id, props));
+    CHK(server_assure_service(&server_b, service_id, props) < 0);
 
-    CHKNOERR(tu_executef_es("echo '%s' > %s", servers[1].addr,
+    CHKNOERR(tu_executef_es("echo '%s' > %s", server_b.addr,
 			    domains_filename));
 
     CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
 
-    CHKNOERR(server_assure_service(servers[1].addr, service_id, props));
-    CHK(server_assure_service(servers[0].addr, service_id, props) < 0);
+    CHKNOERR(server_assure_service(&server_b, service_id, props));
+    CHK(server_assure_service(&server_a, service_id, props) < 0);
 
     paf_detach(context);
 
     paf_props_destroy(props);
     paf_close(context);
+
+    server_stop(&server_a);
+    server_stop(&server_b);
+
+    server_clear(&server_a);
+    server_clear(&server_b);
 
     return UTEST_SUCCESS;
 }
@@ -1437,11 +1541,11 @@ TESTCASE(paf, change_domain_tls_conf)
     int64_t service_id = paf_publish(context, props);
     CHKNOERR(service_id);
 
-    CHKNOERR(start_server(&server));
+    CHKNOERR(server_start(&server));
 
     CHKNOERR(wait_for(context, MAX_RECONNECT_PERIOD));
 
-    CHK(server_assure_service(server.addr, service_id, props) < 0);
+    CHK(server_assure_service(&server, service_id, props) < 0);
 
 
     CHKNOERR(write_json_domains_file(domains_filename, CLIENT_CERT, CLIENT_KEY,
@@ -1449,9 +1553,9 @@ TESTCASE(paf, change_domain_tls_conf)
 
     CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
 
-    CHKNOERR(server_assure_service(server.addr, service_id, props));
+    CHKNOERR(server_assure_service(&server, service_id, props));
 
-    stop_server(&server);
+    server_stop(&server);
 
     paf_detach(context);
 

@@ -794,6 +794,22 @@ static void try_connect(struct link *link)
 
     ptimer_ack(link->timer, &link->reconnect_tmo);
 
+    int old_ns_fd = -1;
+
+    if (link->server->net_ns != NULL) {
+	UT_SAVE_ERRNO;
+	old_ns_fd = ut_net_ns_enter(link->server->net_ns);
+	UT_RESTORE_ERRNO(net_ns_errno);
+
+	if (old_ns_fd < 0) {
+	    log_link_net_ns_enter_failed(link, link->server->net_ns,
+					 net_ns_errno);
+	    goto err_reconnect;
+	}
+
+	log_link_net_ns_entered(link, link->server->net_ns);
+    }
+
     UT_SAVE_ERRNO;
 #ifdef HAVE_XCM_WRITABLE_ATTRS
     struct xcm_attr_map *attrs = xcm_attr_map_create();
@@ -817,10 +833,23 @@ static void try_connect(struct link *link)
 #endif
     UT_RESTORE_ERRNO(connect_errno);
 
+    if (old_ns_fd != -1) {
+	UT_SAVE_ERRNO;
+	int rc = ut_net_ns_return(old_ns_fd);
+	UT_RESTORE_ERRNO(net_ns_errno);
+
+	if (rc < 0) {
+	    log_link_net_ns_return_failed(link, link->server->net_ns,
+					  net_ns_errno);
+	    goto err_reconnect;
+	}
+
+	log_link_net_ns_entered(link, link->server->net_ns);
+    }
+	
     if (link->conn == NULL) {
         log_link_xcm_connect_failed(link, link->server->addr, connect_errno);
-	assure_reconnect_tmo(link);
-	return;
+	goto err_reconnect;
     }
 
     log_link_xcm_initiated(link, link->server->addr);
@@ -839,6 +868,9 @@ static void try_connect(struct link *link)
         proto_ta_produce_request(hello_ta, link->client_id, PROTO_VERSION,
 				 PROTO_VERSION);
     queue_request(link, hello_request);
+
+err_reconnect:
+    assure_reconnect_tmo(link);
 }
 
 int link_process(struct link *link)

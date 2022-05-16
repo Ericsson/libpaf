@@ -46,6 +46,9 @@ source tree.
 To run the tests, issue:
 make check
 
+For the test suite to cover functionality related to network
+namespaces, the CAP_SYS_ADMIN capability is required.
+
 ## Documentation
 
 API documentation in Doxygen format is available in paf.h. `make

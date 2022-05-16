@@ -30,7 +30,8 @@ bool server_conf_equals(const struct server_conf *server0,
 	str_equals(server0->tc_file, server1->tc_file);
 }
 
-struct server_conf *server_conf_create(const char *addr,
+struct server_conf *server_conf_create(const char *net_ns,
+				       const char *addr,
 				       const char *cert_file,
 				       const char *key_file,
 				       const char *tc_file)
@@ -38,6 +39,7 @@ struct server_conf *server_conf_create(const char *addr,
     struct server_conf *server = ut_malloc(sizeof(struct server_conf));
 
     *server = (struct server_conf) {
+	.net_ns = dup_non_null(net_ns),
 	.addr = ut_strdup(addr),
 	.cert_file = dup_non_null(cert_file),
 	.key_file = dup_non_null(key_file),
@@ -50,6 +52,7 @@ struct server_conf *server_conf_create(const char *addr,
 void server_conf_destroy(struct server_conf *server)
 {
     if (server != NULL) {
+	ut_free(server->net_ns);
 	ut_free(server->addr);
 
 	ut_free(server->cert_file);
@@ -62,7 +65,8 @@ void server_conf_destroy(struct server_conf *server)
 
 struct server_conf *server_conf_clone(const struct server_conf *original)
 {
-    return server_conf_create(original->addr, original->cert_file,
-			      original->key_file, original->tc_file);
+    return server_conf_create(original->net_ns, original->addr,
+			      original->cert_file, original->key_file,
+			      original->tc_file);
 }
 	
