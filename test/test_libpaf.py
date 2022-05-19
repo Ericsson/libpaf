@@ -89,14 +89,16 @@ def wait(contexts, timeout=None, until=None):
     while True:
         for context in contexts:
             context.process()
-        if until != None and until():
+        if until is not None and until():
             break
-        if deadline != None and time.time() > deadline:
+        if deadline is not None and time.time() > deadline:
             break
         select_timeout = None
-        if until == None and deadline != None:
+        if until is None and deadline is not None:
             select_timeout = deadline - time.time()
-        elif until != None:
+            if select_timeout < 0:
+                select_timeout = 0
+        elif until is not None:
             # periodically poll critera
             select_timeout = 0.1
         select.select(fds, [], [], select_timeout)
