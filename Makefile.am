@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-AM_CFLAGS = -Wall -Werror
+AM_CFLAGS = -Wall
 
 AM_CPPFLAGS = -I$(srcdir)/include -DSYSCONFDIR='"$(sysconfdir)"'
 

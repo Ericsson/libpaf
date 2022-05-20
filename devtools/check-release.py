@@ -9,6 +9,7 @@
 
 import getopt
 import git
+import os
 import re
 import subprocess
 import sys
@@ -264,6 +265,8 @@ def run(cmd):
         sys.exit(1)
 
 
+EXTRA_CFLAGS="-Werror"
+
 def test_build_separate_build_dir(repo, release_commit):
     release_tag = get_commit_release_tag(repo, release_commit)
 
@@ -286,7 +289,6 @@ make -j; \\
 
     run(cmd)
 
-
 def run_test(repo, conf, release_commit):
     release_tag = get_commit_release_tag(repo, release_commit)
 
@@ -295,6 +297,13 @@ def run_test(repo, conf, release_commit):
         print("using default configure options.")
     else:
         print("using configure options: \"%s\"." % conf)
+
+    cflags = EXTRA_CFLAGS
+    env_cflags = os.environ.get('CFLAGS')
+    if env_cflags is not None:
+        cflags += (" %s" % env_cflags)
+
+    conf += (" CFLAGS=\"%s\"" % cflags)
 
     cmd = """
 tmpdir=`mktemp -d`; \\
