@@ -306,6 +306,7 @@ def run_test(repo, conf, release_commit):
     conf += (" CFLAGS=\"%s\"" % cflags)
 
     cmd = """
+set -e
 tmpdir=`mktemp -d`; \\
 libpafdir=libpaf-%s; \\
 tarfile=$tmpdir/$libpafdir.tar; \\
