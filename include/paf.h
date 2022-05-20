@@ -34,8 +34,12 @@ extern "C" {
  * All the functions in this API are non-blocking in the sense that no
  * blocking system calls are made.
  *
- * For simplicity, the library implementing this API is referred to as
- * @c libpaf, although there might be other implementations as well.
+ * For a description of the Pathfinder data model, refer to the <a
+ * href="https://github.com/Ericsson/paf/blob/master/doc/PROTOCOL.md">
+ * Pathfinder Protocol Specification</a>. Note: there are important
+ * semantical differences between certain operations on the protocol
+ * level, compared to this API (e.g., paf_publish() doesn't have the
+ * exact same semantics as the @c publish protocol-level command).
  *
  * @section domains Service Discovery Domains
  *
