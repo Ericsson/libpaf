@@ -46,6 +46,8 @@ int64_t ut_rand_id(void);
 double ut_frand(void);
 double ut_frandomize(double d);
 
+pid_t ut_gettid(void);
+
 ssize_t ut_read_file(int fd, void* buf, size_t capacity);
 
 bool ut_str_begins_with(const char *s, char c);

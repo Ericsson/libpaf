@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/syscall.h> /* gettid */
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -195,6 +196,11 @@ double ut_frandomize(double d)
     return k * d;
 }
 
+pid_t ut_gettid(void)
+{
+    return (pid_t)syscall(SYS_gettid);
+}
+
 ssize_t ut_read_file(int fd, void* buf, size_t capacity) {
     size_t offset = 0;
     do {
@@ -246,7 +252,7 @@ int ut_net_ns_enter(const char *ns_name)
     /* we can't use "/proc/self/ns/net" here, because it points
        towards the *process* (i.e. main thread's ns), which might not
        be the current thread's ns */
-    snprintf(old_ns, sizeof(old_ns), "/proc/%d/ns/net", gettid());
+    snprintf(old_ns, sizeof(old_ns), "/proc/%d/ns/net", ut_gettid());
 
     int old_ns_fd = open(old_ns, O_RDONLY, 0);
     if (old_ns_fd < 0)
