@@ -50,7 +50,6 @@ struct paf_context
     struct sd *sd;
     int64_t sd_tmo;
 
-    struct timespec domain_file_mtime;
     double rescan_period;
     int64_t rescan_tmo;
 
@@ -115,7 +114,7 @@ static void rescan_domain_file(struct paf_context *ctx)
 {
     UT_SAVE_ERRNO;
     struct domain_conf *conf = 
-	domain_conf_read(ctx->domain, &ctx->domain_file_mtime, ctx->log_ref);
+	domain_conf_read(ctx->domain, ctx->log_ref);
     UT_RESTORE_ERRNO_DC;
 
     if (conf == NULL)

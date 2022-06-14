@@ -135,16 +135,6 @@ int ut_vsnprintf(char *buf, size_t capacity, const char *format, va_list ap)
     return rc;
 }
 
-bool ut_timespec_lte(const struct timespec *a, const struct timespec *b)
-{
-    if (a->tv_sec < b->tv_sec)
-	return true;
-    if (a->tv_sec > b->tv_sec)
-	return false;
-    else
-	return a->tv_nsec <= b->tv_nsec;
-}
-
 double ut_timespec_to_f(const struct timespec *ts)
 {
     return (double)ts->tv_sec + (double)ts->tv_nsec / 1e9;

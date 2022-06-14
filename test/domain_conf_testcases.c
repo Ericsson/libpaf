@@ -59,18 +59,7 @@ TESTCASE(domain_conf, read_file)
     tu_executef("echo \"%s\n# A comment\n%s\n\" > %s/%s", addr0, addr1,
 		domain_dir, domain_name);
 
-    /* new (future, even) mtime */
-    struct timespec mtime = {
-	.tv_sec = time(NULL) + 2
-    };
-
-    errno = 1234;
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
-    CHK(conf == NULL);
-    CHKERRNOEQ(0);
-
-    mtime.tv_sec = 0;
-    conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf != NULL);
     CHKINTEQ(conf->num_servers, 2);
 
@@ -79,16 +68,10 @@ TESTCASE(domain_conf, read_file)
 
     domain_conf_destroy(conf);
 
-    errno = 1234;
-    conf = domain_conf_read(domain_name, &mtime, NULL);
-    CHK(conf == NULL);
-    CHKERRNOEQ(0);
-
     /* this test doesn't work for root, since it can read all files */
     if (getuid() != 0) {
 	tu_executef("chmod a-rwx %s/%s", domain_dir, domain_name);
-	mtime.tv_sec = time(NULL) - 1;
-	conf = domain_conf_read(domain_name, &mtime, NULL);
+	conf = domain_conf_read(domain_name, NULL);
 	CHK(conf == NULL);
 	CHKERRNOEQ(EACCES);
 	tu_executef("chmod u+rw %s/%s", domain_dir, domain_name);
@@ -106,10 +89,6 @@ TESTCASE(domain_conf, json_read_file)
     const char *cert_file = "/asdf/cert.pem";
     const char *key_file = "/asdf/key.pem";
     const char *tc_file = "/asdf/cabundle.pem";
-
-    struct timespec mtime = {
-	.tv_sec = time(NULL) - 1
-    };
 
     tu_executef("echo '"
 		"{\n"
@@ -131,7 +110,7 @@ TESTCASE(domain_conf, json_read_file)
 		"}\n' > %s/%s", addr0, addr1, net_ns, addr2,
 		cert_file, key_file, tc_file, domain_dir, domain_name);
 
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf != NULL);
     CHKINTEQ(conf->num_servers, 3);
 
@@ -165,9 +144,7 @@ TESTCASE(domain_conf, repeated_server_addr)
     tu_executef("echo \"%s\n# A comment\n%s\n\" > %s/%s", addr, addr,
 		domain_dir, domain_name);
 
-    struct timespec mtime = { 0 };
-
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf == NULL);
 
     return UTEST_SUCCESS;
@@ -175,10 +152,6 @@ TESTCASE(domain_conf, repeated_server_addr)
 
 TESTCASE(domain_conf, json_repeated_addr)
 {
-    struct timespec mtime = {
-	.tv_sec = time(NULL) - 1
-    };
-
     tu_executef("echo '"
 		"{\n"
 		"  \"servers\": [\n"
@@ -194,7 +167,7 @@ TESTCASE(domain_conf, json_repeated_addr)
 		"  ]\n"
 		"}\n' > %s/%s", domain_dir, domain_name);
 
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf == NULL);
     CHKERRNOEQ(EINVAL);
 
@@ -205,9 +178,7 @@ TESTCASE(domain_conf, read_empty_file)
 {
     tu_executef("touch %s/%s", domain_dir, domain_name);
 
-    struct timespec mtime = { 0 };
-
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf != NULL);
     CHKINTEQ(conf->num_servers, 0);
 
@@ -222,9 +193,7 @@ TESTCASE(domain_conf, read_file_wo_newline)
 
     tu_executef("echo \"%s\" > %s/%s", addr, domain_dir, domain_name);
 
-    struct timespec mtime = { 0 };
-
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf != NULL);
     CHKINTEQ(conf->num_servers, 1);
     CHKSTREQ(addr, conf->servers[0]->addr);
@@ -236,11 +205,7 @@ TESTCASE(domain_conf, read_file_wo_newline)
 
 TESTCASE(domain_conf, json_missing_address)
 {
-    struct timespec mtime = {
-	.tv_sec = time(NULL) - 1
-    };
-
-    tu_executef("echo '"
+     tu_executef("echo '"
 		"{\n"
 		"  \"servers\": [\n"
 		"    {\n"
@@ -251,7 +216,7 @@ TESTCASE(domain_conf, json_missing_address)
 		"  ]\n"
 		"}\n' > %s/%s", domain_dir, domain_name);
 
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf == NULL);
     CHKERRNOEQ(EINVAL);
 
@@ -262,10 +227,6 @@ TESTCASE(domain_conf, json_missing_address)
 
 TESTCASE(domain_conf, invalid_json)
 {
-    struct timespec mtime = {
-	.tv_sec = time(NULL) - 1
-    };
-
     tu_executef("echo '"
 		"{\n"
 		"  \"servers\": [\n"
@@ -275,7 +236,7 @@ TESTCASE(domain_conf, invalid_json)
 		"  \n"
 		"}\n' > %s/%s", domain_dir, domain_name);
 
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf == NULL);
     CHKERRNOEQ(EINVAL);
 
@@ -286,10 +247,6 @@ TESTCASE(domain_conf, invalid_json)
 
 TESTCASE(domain_conf, json_invalid_address_format)
 {
-    struct timespec mtime = {
-	.tv_sec = time(NULL) - 1
-    };
-
     tu_executef("echo '"
 		"{\n"
 		"  \"servers\": [\n"
@@ -301,7 +258,7 @@ TESTCASE(domain_conf, json_invalid_address_format)
 		"  ]\n"
 		"}\n' > %s/%s", domain_dir, domain_name);
 
-    struct domain_conf *conf = domain_conf_read(domain_name, &mtime, NULL);
+    struct domain_conf *conf = domain_conf_read(domain_name, NULL);
     CHK(conf == NULL);
     CHKERRNOEQ(EINVAL);
 

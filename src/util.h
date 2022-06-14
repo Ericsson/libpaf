@@ -36,7 +36,6 @@ int ut_snprintf(char *buf, size_t capacity, const char *format, ...)
 int ut_vsnprintf(char *buf, size_t capacity, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
 
-bool ut_timespec_lte(const struct timespec *a, const struct timespec *b);
 double ut_timespec_to_f(const struct timespec *ts);
 void ut_f_to_timespec(double t, struct timespec *ts);
 

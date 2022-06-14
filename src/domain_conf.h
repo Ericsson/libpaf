@@ -18,7 +18,6 @@ struct domain_conf
 };
 
 struct domain_conf* domain_conf_read(const char *domain,
-				     struct timespec *mtime,
 				     const char *log_ref);
 void domain_conf_destroy(struct domain_conf *conf);
 

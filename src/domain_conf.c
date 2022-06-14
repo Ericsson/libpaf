@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 
 #include <jansson.h>
@@ -225,7 +224,6 @@ static bool looks_like_json_object(const char *data)
 #define MAX_DOMAIN_DATA_SIZE (64*1024)
 
 struct domain_conf *domain_conf_read(const char *domain,
-				     struct timespec *mtime,
 				     const char *log_ref)
 {
     char domain_filename[PATH_MAX];
@@ -242,24 +240,12 @@ struct domain_conf *domain_conf_read(const char *domain,
 	goto out;
     }
 
-    struct stat st;
-    if (fstat(domain_file, &st) < 0) {
-	log_domain_conf_read_error(log_ref, domain_filename, errno);
-	goto out_close;
-    }
-
-    if (ut_timespec_lte(&st.st_mtim, mtime)) {
-	log_domain_conf_unchanged(log_ref, domain_filename);
-	errno = 0;
-	goto out_close;
-    }
-
     char *data = ut_malloc(MAX_DOMAIN_DATA_SIZE + 1);
 
     ssize_t len = ut_read_file(domain_file, data, MAX_DOMAIN_DATA_SIZE);
 
     if (len < 0)
-	goto out_free;
+	goto out_cleanup;
 
     data[len] = '\0';
 
@@ -268,16 +254,11 @@ struct domain_conf *domain_conf_read(const char *domain,
     else
 	conf = custom_to_conf(domain_filename, data, log_ref);
 
-    if (conf == NULL) {
+    if (conf == NULL)
 	errno = EINVAL;
-	goto out_free;
-    }
 
-    *mtime = st.st_mtim;
-
-out_free:
+out_cleanup:
     ut_free(data);
-out_close:
     UT_PROTECT_ERRNO(close(domain_file));
 out:
     return conf;
