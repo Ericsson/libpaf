@@ -75,8 +75,7 @@ static int add_server(struct domain_conf *conf, const char *filename,
 #define COMMENT_CHAR '#'
 
 static struct domain_conf *custom_to_conf(const char *filename,
-					  const char *data,
-					  const char *log_ref)
+					  char *data, const char *log_ref)
 {
     struct domain_conf *conf = ut_calloc(sizeof(struct domain_conf));
 
