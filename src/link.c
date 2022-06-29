@@ -869,6 +869,8 @@ static void try_connect(struct link *link)
 				 PROTO_VERSION);
     queue_request(link, hello_request);
 
+    return;
+
 err_reconnect:
     assure_reconnect_tmo(link);
 }
