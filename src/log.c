@@ -25,7 +25,7 @@ static bool console_log = false;
 
 #define BUFSZ (1024)
 
-bool log_is_enabled(enum log_type type)
+bool log_is_enabled(enum log_type __attribute__((unused)) type)
 {
     if (console_log)
         return true;
@@ -80,9 +80,9 @@ static void log_console(const char *file, int line, const char *function,
     } while (0)
 #endif
 
-void __log_event(enum log_type type, const char *file, int line,
-                 const char *function, const char *prefix,
-                 const char *format, ...)
+void __log_event(enum log_type __attribute__((unused)) type,
+		 const char *file, int line, const char *function,
+		 const char *prefix, const char *format, ...)
 {
     va_list ap;
     va_start(ap, format);
