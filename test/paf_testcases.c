@@ -457,11 +457,14 @@ static int teardown(void)
 
 #define MAX_FDS (64)
 
+#define MAX_PROCESS_CALLS (10000)
+
 static int wait_for_all(struct paf_context **contexts, size_t num_contexts,
                         double duration)
 {
     double now = ut_ftime(CLOCK_REALTIME);
     double deadline = now + duration;
+    int process_calls = 0;
 
     for (; now < deadline; now = ut_ftime(CLOCK_REALTIME)) {
         double left = deadline - now;
@@ -483,13 +486,22 @@ static int wait_for_all(struct paf_context **contexts, size_t num_contexts,
 
         if (rc == 0) /* timeout */
             return 0;
-        else if (rc < 0)
+	else if (rc < 0)
             return -1;
 
         for (i = 0; i < num_contexts; i++) {
 	    int rc = paf_process(contexts[i]);
 	    if (rc < 0)
 		return rc;
+
+	    process_calls++;
+
+	    /* MAX_PROCESS_CALLS is set so it is more than high enough
+	       for all test cases in this suite. If exceeded,
+	       something is wrong (e.g., the fd is not being properly
+	       deactivated by a paf_process() call. */
+	    if (process_calls > MAX_PROCESS_CALLS)
+		return -1;
 	}
     }
 
