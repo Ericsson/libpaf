@@ -357,12 +357,8 @@ static int domain_setup(void)
 	CHKNOERR(write_nl_domains_file(domains_filename, servers,
 				       NUM_SERVERS));
     else {
-	bool tls_conf;
-#ifdef HAVE_XCM_WRITABLE_ATTRS
-	tls_conf = tu_randbool();
-#else
-	tls_conf = false;
-#endif
+	bool tls_conf = tu_randbool();
+
 	if (tls_conf)
 	    CHKNOERR(write_json_domains_file(domains_filename, CLIENT_CERT,
 					     CLIENT_KEY, CLIENT_TC,
@@ -1530,8 +1526,6 @@ TESTCASE(paf, change_domains_file)
     return UTEST_SUCCESS;
 }
 
-#ifdef HAVE_XCM_WRITABLE_ATTRS
-
 TESTCASE(paf, change_domain_tls_conf)
 {
     char *tls_addr = random_tls_addr();
@@ -1578,8 +1572,6 @@ TESTCASE(paf, change_domain_tls_conf)
 
     return UTEST_SUCCESS;
 }
-
-#endif
 
 pid_t fake_server(double duration, double reconnect_min,
 		  double reconnect_max, const char *addr)

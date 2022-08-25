@@ -775,7 +775,6 @@ static void restart(struct link *link)
     assure_reconnect_tmo(link);
 }
 
-#ifdef HAVE_XCM_WRITABLE_ATTRS
 static void add_non_null(struct xcm_attr_map *attrs,
 			 const char *attr_name,
 			 const char *attr_value)
@@ -783,7 +782,6 @@ static void add_non_null(struct xcm_attr_map *attrs,
     if (attr_value != NULL)
 	xcm_attr_map_add_str(attrs, attr_name, attr_value);
 }
-#endif
 
 static void try_connect(struct link *link)
 {
@@ -811,7 +809,7 @@ static void try_connect(struct link *link)
     }
 
     UT_SAVE_ERRNO;
-#ifdef HAVE_XCM_WRITABLE_ATTRS
+
     struct xcm_attr_map *attrs = xcm_attr_map_create();
 
     xcm_attr_map_add_bool(attrs, "xcm.blocking", false);
@@ -822,15 +820,7 @@ static void try_connect(struct link *link)
     link->conn = xcm_connect_a(link->server->addr, attrs);
 
     xcm_attr_map_destroy(attrs);
-#else
-    if (link->server->cert_file != NULL ||
-	link->server->key_file != NULL ||
-	link->server->tc_file != NULL) {
-	log_link_tls_conf_old_xcm(link);
-	errno = EINVAL;
-    } else
-	link->conn = xcm_connect(link->server->addr, XCM_NONBLOCK);
-#endif
+
     UT_RESTORE_ERRNO(connect_errno);
 
     if (old_ns_fd != -1) {

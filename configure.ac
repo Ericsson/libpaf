@@ -39,9 +39,6 @@ AC_CHECK_HEADERS(xcm.h, [],
                  [AC_MSG_ERROR([Unable to find XCM header files.])])
 AC_CHECK_LIB(xcm, xcm_connect, [],
              [AC_MSG_ERROR([Unable to find the XCM library.])])
-AC_CHECK_LIB(xcm, xcm_connect_a,
-             [AC_DEFINE([HAVE_XCM_WRITABLE_ATTRS], [1],
-	                [XCM version with writable attribute support.])], [])
 
 AC_CHECK_HEADERS(jansson.h, [],
                  [AC_MSG_ERROR([Unable to find Jansson header files.])])
