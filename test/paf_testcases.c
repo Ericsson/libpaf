@@ -926,8 +926,7 @@ TESTCASE(paf, subscribe_flaky_server)
     struct paf_props *props = paf_props_create();
     paf_props_add_str(props, "name", "foo");
 
-    const double publish_duration = MAX_RECONNECT_PERIOD * 4;
-    pid_t bg_pid = bg_publisher(domain_name, props, publish_duration);
+    pid_t bg_pid = bg_publisher(domain_name, props, 5.0);
 
     CHKNOERR(bg_pid);
 
