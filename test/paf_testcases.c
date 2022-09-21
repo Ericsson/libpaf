@@ -744,7 +744,7 @@ TESTCASE(paf, publish_unpublish_many)
     for (i = 0; i < MANY; i++)
         paf_unpublish(context, service_ids[i]);
 
-    CHKNOERR(wait_for_service_count(context, LAG, 0));
+    CHKNOERR(wait_for_service_count(context, 5.0, 0));
 
     paf_close(context);
 
@@ -794,7 +794,7 @@ TESTCASE_SERIALIZED(paf, connect_publish_latency_retry)
     REQUIRE_NOT_IN_VALGRIND;
 
     pid_t client_pid =
-	check_publish_latency(domain_name, MAX_RECONNECT_PERIOD + 0.2);
+	check_publish_latency(domain_name, MAX_RECONNECT_PERIOD + 1;
 
     CHKNOERR(client_pid);
 
