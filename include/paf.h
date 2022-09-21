@@ -229,6 +229,9 @@ struct paf_context;
  * the extent any such happens during paf_attach(), also doesn't make
  * the call fail.
  *
+ * A context may not be left unattended. See paf_process() for details
+ * how to avoid such a situation.
+ *
  * @param[in] domain_name The name of the Pathfinder domain.
  *
  * @return Returns a context reference on success, or NULL if the
@@ -246,7 +249,8 @@ struct paf_context *paf_attach(const char *domain_name);
  * The successful return of paf_publish() indicates that the service
  * as been accepted into the library's context. It does not mean that
  * the service has yet been successfully published in a server, or
- * even that there is a connection to a server.
+ * even that there is a connection to a server. Actual publication may
+ * be deferred until the next, or some future, paf_process() call.
  *
  * @param[in] context A reference to the domain where the service should be published.
  * @param[in] props The properties of this service. Must be non-NULL, but may be an empty set.
