@@ -794,7 +794,7 @@ TESTCASE_SERIALIZED(paf, connect_publish_latency_retry)
     REQUIRE_NOT_IN_VALGRIND;
 
     pid_t client_pid =
-	check_publish_latency(domain_name, MAX_RECONNECT_PERIOD + 1;
+	check_publish_latency(domain_name, MAX_RECONNECT_PERIOD + 1);
 
     CHKNOERR(client_pid);
 
