@@ -14,10 +14,10 @@
 #define log_link_error(link, fmt, ...)		\
     log_obj_error(link, fmt, ##__VA_ARGS__)
 
-#define log_link_start(link, domain_addr)	\
+#define log_link_start(link)			\
     log_link_debug(link, "Link created.")
 
-#define log_link_restart(link, domain_addr)	\
+#define log_link_restart(link)			\
     log_link_debug(link, "Link restarting.")
 
 #define log_link_detaching(link)		\

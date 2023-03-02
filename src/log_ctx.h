@@ -32,6 +32,9 @@
 	char buf[1024];							\
 	ut_snprintf(buf, sizeof(buf), "Setting up link id %"PRId64" "	\
 		    "with domain address %s.", link_id, (server)->addr); \
+	if (server->local_addr != NULL)					\
+	    ut_aprintf(buf, sizeof(buf), " Local address: \"%s\".",	\
+		       server->local_addr);				\
 	if (server->cert_file != NULL)					\
 	    ut_aprintf(buf, sizeof(buf), " Certificate file: \"%s\".",	\
 		       server->cert_file);				\

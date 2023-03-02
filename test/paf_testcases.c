@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <xcm.h>
+#include <xcm_addr.h>
 
 #include "testutil.h"
 #include "utest.h"
@@ -79,6 +80,7 @@ static char *domains_filename;
 struct server {
     char *net_ns;
     char *addr;
+    char *local_addr;
     pid_t pid;
 } server;
 
@@ -90,6 +92,7 @@ static void server_clear(struct server *server)
 {
     ut_free(server->net_ns);
     ut_free(server->addr);
+    ut_free(server->local_addr);
     server->net_ns = NULL;
     server->addr = NULL;
 }
@@ -205,6 +208,23 @@ static char *random_addr(void)
     }
 }
 
+static char *random_local_addr(const char *addr)
+{
+    bool has_local = tu_randbool();
+
+    if (!has_local)
+	return NULL;
+
+    char proto[16];
+    xcm_addr_parse_proto(addr, proto, sizeof(proto));
+
+    if (strcmp(proto, XCM_TCP_PROTO) == 0)
+	return random_tcp_addr();
+    else if (strcmp(proto, XCM_TLS_PROTO) == 0)
+	return random_tls_addr();
+    return NULL;
+}
+
 static char *random_net_ns(void)
 {
     return ut_asprintf("ns-%d-%d", getpid(), tu_randint(0, INT_MAX));
@@ -234,11 +254,11 @@ static bool is_tls(const char *addr)
     return strncmp("tls", addr, 3) == 0 || strncmp("utls", addr, 4) == 0;
 }
 
-static int write_json_domains_file(const char *filename,
-				   const char *cert_file,
-				   const char *key_file,
-				   const char *tc_file,
-				   struct server *servers, size_t num_servers)
+static int write_json_domain_file(const char *filename,
+				  const char *cert_file,
+				  const char *key_file,
+				  const char *tc_file,
+				  struct server *servers, size_t num_servers)
 {
     FILE *domains_file = fopen(filename, "w");
 
@@ -256,6 +276,10 @@ static int write_json_domains_file(const char *filename,
 	struct server *server = &servers[i];
 	fprintf(domains_file, "    {\n"
 		"      \"address\": \"%s\"", server->addr);
+
+	if (server->local_addr != NULL)
+	    fprintf(domains_file, ",\n"
+		    "      \"localAddress\": \"%s\"", server->local_addr);
 
 	if (server->net_ns != NULL)
 	    fprintf(domains_file, ",\n"
@@ -347,6 +371,7 @@ static int domain_setup(void)
 	    server->net_ns = NULL;
 
 	server->addr = random_addr();
+	server->local_addr = random_local_addr(server->addr);
 	server->pid = -1;
 
 	if (server->net_ns != NULL && tu_add_net_ns(server->net_ns) < 0)
@@ -360,12 +385,12 @@ static int domain_setup(void)
 	bool tls_conf = tu_randbool();
 
 	if (tls_conf)
-	    CHKNOERR(write_json_domains_file(domains_filename, CLIENT_CERT,
-					     CLIENT_KEY, CLIENT_TC,
-					     servers, NUM_SERVERS));
+	    CHKNOERR(write_json_domain_file(domains_filename, CLIENT_CERT,
+					    CLIENT_KEY, CLIENT_TC,
+					    servers, NUM_SERVERS));
 	else
-	    CHKNOERR(write_json_domains_file(domains_filename, NULL, NULL,
-					     NULL, servers, NUM_SERVERS));
+	    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL,
+					    NULL, servers, NUM_SERVERS));
     }
 
     return UTEST_SUCCESS;
@@ -571,6 +596,12 @@ static int tclient(const struct server *server,
 static int assure_server_up(struct server *server)
 {
     return tclient(server, "assure-up");
+}
+
+static int assure_client_from(struct server *server,
+			      const char *client_remote_addr)
+{
+    return tclient(server, "assure-client-from %s", client_remote_addr);
 }
 
 static int server_assure_service(struct server *server, int64_t service_id,
@@ -1534,7 +1565,7 @@ TESTCASE(paf, change_domain_tls_conf)
 	.pid = -1
     };
 
-    CHKNOERR(write_json_domains_file(domains_filename,
+    CHKNOERR(write_json_domain_file(domains_filename,
 				     UNTRUSTED_CLIENT_CERT,
 				     UNTRUSTED_CLIENT_KEY,
 				     UNTRUSTED_CLIENT_TC,
@@ -1553,7 +1584,7 @@ TESTCASE(paf, change_domain_tls_conf)
     CHK(server_assure_service(&server, service_id, props) < 0);
 
 
-    CHKNOERR(write_json_domains_file(domains_filename, CLIENT_CERT, CLIENT_KEY,
+    CHKNOERR(write_json_domain_file(domains_filename, CLIENT_CERT, CLIENT_KEY,
 				     CLIENT_TC, &server, 1));
 
     CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
@@ -1699,6 +1730,36 @@ TESTCASE(paf, crazy_large_filter)
     ut_free(filter);
 
     paf_close(context);
+
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(paf, local_addr)
+{
+    char *addr = random_tcp_addr();
+    char *local_addr = random_tcp_addr();
+
+    struct server server = {
+	.addr = addr,
+	.local_addr = local_addr,
+	.pid = -1
+    };
+
+    CHKNOERR(server_start(&server));
+
+    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL, NULL,
+				    &server, 1));
+
+    struct paf_context *context = paf_attach(domain_name);
+
+    CHKNOERR(wait_for(context, 0.5));
+
+    CHKNOERR(assure_client_from(&server, local_addr));
+
+    paf_close(context);
+
+    ut_free(addr);
+    ut_free(local_addr);
 
     return UTEST_SUCCESS;
 }

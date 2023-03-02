@@ -726,7 +726,7 @@ struct link *link_create(int64_t link_id, int64_t client_id,
     TAILQ_INIT(&link->out_queue);
     LIST_INIT(&link->transactions);
 
-    log_link_start(link, domain_addr);
+    log_link_start(link);
 
     link->state = link_state_connecting;
 
@@ -757,7 +757,7 @@ static void assure_reconnect_tmo(struct link *link)
 
 static void restart(struct link *link)
 {
-    log_link_restart(link, domain_addr);
+    log_link_restart(link);
 
     epoll_reg_reset(&link->epoll_reg);
 
@@ -813,6 +813,9 @@ static void try_connect(struct link *link)
     struct xcm_attr_map *attrs = xcm_attr_map_create();
 
     xcm_attr_map_add_bool(attrs, "xcm.blocking", false);
+
+    add_non_null(attrs, "xcm.local_addr", link->server->local_addr);
+
     add_non_null(attrs, "tls.cert_file", link->server->cert_file);
     add_non_null(attrs, "tls.key_file", link->server->key_file);
     add_non_null(attrs, "tls.tc_file", link->server->tc_file);

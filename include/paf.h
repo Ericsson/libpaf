@@ -92,6 +92,10 @@ extern "C" {
  * The server object must have a key "address", with the server's
  * address in XCM format as its value.
  *
+ * A server object may have a key "localAddress", in which case this
+ * XCM-formatted address will be bound to before establishing an
+ * outgoing connection.
+ *
  * A server object may include a key "networkNamespace". If present,
  * the library will make sure the outoing transport layer connection
  * originates from a Linux network namespace named per the key's
@@ -120,7 +124,8 @@ extern "C" {
  *       "tlsTrustedCaFile": "/etc/paf/certs/ca-bundle.pem"
  *     },
  *     {
- *       "address": "tls:5.6.7.8:8888"
+ *       "address": "tls:5.6.7.8:8888",
+ *       "localAddress": "tls:9.9.9.9:0"
  *     },
  *     {
  *       "address": "tcp:fqdn:1111",
@@ -477,7 +482,7 @@ void paf_detach(struct paf_context *context);
 /**
  * Close the context.
  *
- * This function will free all resources associated with @ref context.
+ * This function will free all resources associated with @c context.
  *
  * It is legal to call this function, even if the context is still
  * attached (i.e. paf_detach() was not called, or paf_process() has

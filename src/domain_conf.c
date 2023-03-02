@@ -44,8 +44,9 @@ static bool has_server_addr(struct domain_conf *conf, const char *server_addr)
 
 static int add_server(struct domain_conf *conf, const char *filename,
 		      const char *net_ns, const char *addr,
-		      const char *cert_file, const char *key_file,
-		      const char *tc_file, const char *log_ref)
+		      const char *local_addr, const char *cert_file,
+		      const char *key_file, const char *tc_file,
+		      const char *log_ref)
 {
     char proto[64];
 
@@ -64,7 +65,8 @@ static int add_server(struct domain_conf *conf, const char *filename,
 	ut_realloc(conf->servers, sizeof(struct server *) * new_num_servers);
 
     conf->servers[conf->num_servers] =
-	server_conf_create(net_ns, addr, cert_file, key_file, tc_file);
+	server_conf_create(net_ns, addr, local_addr, cert_file, key_file,
+			   tc_file);
 
     conf->num_servers = new_num_servers;
 
@@ -89,7 +91,7 @@ static struct domain_conf *custom_to_conf(const char *filename,
 	    *end = '\0';
 
 	if (strlen(start) > 0 && !ut_str_begins_with(start, COMMENT_CHAR)
-	    && add_server(conf, filename, NULL, start, NULL, NULL, NULL,
+	    && add_server(conf, filename, NULL, start, NULL, NULL, NULL, NULL,
 			  log_ref) < 0) {
 	    domain_conf_destroy(conf);
 	    return NULL;
@@ -156,10 +158,17 @@ static struct domain_conf *json_to_conf(const char *filename,
 	    goto err_free_conf;
 	}
 
+	const char *net_ns =
+	    get_server_key(filename, server, "networkNamespace", false,
+			   log_ref);
+
 	const char *addr =
 	    get_server_key(filename, server, "address", true, log_ref);
 	if (addr == NULL)
 	    goto err_free_conf;
+
+	const char *local_addr =
+	    get_server_key(filename, server, "localAddress", false, log_ref);
 
 	const char *cert_file =
 	    get_server_key(filename, server, "tlsCertificateFile", false,
@@ -177,12 +186,8 @@ static struct domain_conf *json_to_conf(const char *filename,
 	    goto err_free_conf;
 	}
 
-	const char *net_ns =
-	    get_server_key(filename, server, "networkNamespace", false,
-			   log_ref);
-
-	if (add_server(conf, filename, net_ns, addr, cert_file, key_file,
-		       tc_file, log_ref) < 0)
+	if (add_server(conf, filename, net_ns, addr, local_addr, cert_file,
+		       key_file, tc_file, log_ref) < 0)
 	    goto err_free_conf;
     }
 

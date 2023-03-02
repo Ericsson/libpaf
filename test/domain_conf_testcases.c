@@ -84,6 +84,7 @@ TESTCASE(domain_conf, json_read_file)
 {
     const char *addr0 = "ux:foo";
     const char *addr1 = "tls:127.0.0.1:4711";
+    const char *local_addr1 = "tls:127.0.0.2:0";
     const char *net_ns = "test_ns";
     const char *addr2 = "tls:127.0.42.1:42";
     const char *cert_file = "/asdf/cert.pem";
@@ -98,6 +99,7 @@ TESTCASE(domain_conf, json_read_file)
 		"    },\n"
 		"    {\n"
 		"      \"address\": \"%s\",\n"
+		"      \"localAddress\": \"%s\",\n"
 		"      \"networkNamespace\": \"%s\"\n"
 		"    },\n"
 		"    {\n"
@@ -107,7 +109,7 @@ TESTCASE(domain_conf, json_read_file)
 		"      \"tlsTrustedCaFile\": \"%s\"\n"
 		"    }\n"
 		"  ]\n"
-		"}\n' > %s/%s", addr0, addr1, net_ns, addr2,
+		"}\n' > %s/%s", addr0, addr1, local_addr1, net_ns, addr2,
 		cert_file, key_file, tc_file, domain_dir, domain_name);
 
     struct domain_conf *conf = domain_conf_read(domain_name, NULL);
@@ -116,18 +118,21 @@ TESTCASE(domain_conf, json_read_file)
 
     CHKNULL(conf->servers[0]->net_ns);
     CHKSTREQ(conf->servers[0]->addr, addr0);
+    CHKNULL(conf->servers[0]->local_addr);
     CHKNULL(conf->servers[0]->cert_file);
     CHKNULL(conf->servers[0]->key_file);
     CHKNULL(conf->servers[0]->tc_file);
 
     CHKSTREQ(conf->servers[1]->net_ns, net_ns);
     CHKSTREQ(conf->servers[1]->addr, addr1);
+    CHKSTREQ(conf->servers[1]->local_addr, local_addr1);
     CHKNULL(conf->servers[1]->cert_file);
     CHKNULL(conf->servers[1]->key_file);
     CHKNULL(conf->servers[1]->tc_file);
 
-    CHKNULL(conf->servers[0]->net_ns);
+    CHKNULL(conf->servers[2]->net_ns);
     CHKSTREQ(conf->servers[2]->addr, addr2);
+    CHKNULL(conf->servers[2]->local_addr);
     CHKSTREQ(conf->servers[2]->cert_file, cert_file);
     CHKSTREQ(conf->servers[2]->key_file, key_file);
     CHKSTREQ(conf->servers[2]->tc_file, tc_file);

@@ -17,6 +17,7 @@ def usage(name):
     print("%s <addr> <cmd> [<arg>...]" % name)
     print("Commands:")
     print("    assure-up")
+    print("    assure-client-from <remote-addr>")
     print("    assure-service <service-id> [<prop-name> <prop-value> ...]")
     print("    assure-service-count <count>")
     print("    assure-subscription <subscription-id> <filter>")
@@ -28,6 +29,16 @@ if len(sys.argv) < 3 or sys.argv[1] == '-h':
 def assure_up(conn, *args):
     conn.ping()
     sys.exit(0)
+
+def assure_client_from(conn, *args):
+    remote_addr = args[0]
+
+    clients = conn.clients()
+
+    for client in clients:
+        if remote_addr == client[1]:
+            sys.exit(0)
+    sys.exit(1)
 
 def parse_props(args):
     if len(args) % 2 != 0:
@@ -99,6 +110,8 @@ cmd = sys.argv[2]
 fun = None
 if cmd == 'assure-up':
     fun = assure_up
+elif cmd == 'assure-client-from':
+    fun = assure_client_from
 elif cmd == 'assure-service':
     fun = assure_service
 elif cmd == 'assure-service-count':

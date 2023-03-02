@@ -7,6 +7,7 @@ struct server_conf
 {
     char *net_ns;
     char *addr;
+    char *local_addr;
     char *cert_file;
     char *key_file;
     char *tc_file;
@@ -14,6 +15,7 @@ struct server_conf
 
 struct server_conf *server_conf_create(const char *net_ns,
 				       const char *addr,
+				       const char *local_addr,
 				       const char *cert_file,
 				       const char *key_file,
 				       const char *tc_file);
