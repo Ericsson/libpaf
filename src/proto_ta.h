@@ -107,7 +107,7 @@ enum proto_ta_state {
 
 struct proto_ta
 {
-    struct proto_ta_type *type;
+    const struct proto_ta_type *type;
     int64_t ta_id;
     enum proto_ta_state state;
     char *log_ref;

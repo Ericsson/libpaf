@@ -76,7 +76,7 @@ static json_t *create_request(const char *cmd, int64_t ta_id)
     return request;
 }
 
-static struct proto_ta_type hello_ta =
+static const struct proto_ta_type hello_ta =
 {
     .cmd = PROTO_CMD_HELLO,
     .ia_type = proto_ia_type_single_response,
@@ -94,7 +94,7 @@ static struct proto_ta_type hello_ta =
 
 };
 
-static struct proto_ta_type publish_ta =
+static const struct proto_ta_type publish_ta =
 {
     .cmd = PROTO_CMD_PUBLISH,
     .ia_type = proto_ia_type_single_response,
@@ -109,7 +109,7 @@ static struct proto_ta_type publish_ta =
     }
 };
 
-static struct proto_ta_type unpublish_ta =
+static const struct proto_ta_type unpublish_ta =
 {
     .cmd = PROTO_CMD_UNPUBLISH,
     .ia_type = proto_ia_type_single_response,
@@ -121,7 +121,7 @@ static struct proto_ta_type unpublish_ta =
     }
 };
 
-static struct proto_ta_type subscribe_ta =
+static const struct proto_ta_type subscribe_ta =
 {
     .cmd = PROTO_CMD_SUBSCRIBE,
     .ia_type = proto_ia_type_multi_response,
@@ -144,7 +144,7 @@ static struct proto_ta_type subscribe_ta =
     }
 };
 
-static struct proto_ta_type unsubscribe_ta =
+static const struct proto_ta_type unsubscribe_ta =
 {
     .cmd = PROTO_CMD_UNSUBSCRIBE,
     .ia_type = proto_ia_type_single_response,
@@ -156,9 +156,9 @@ static struct proto_ta_type unsubscribe_ta =
     }
 };
 
-struct proto_ta *create_ta(struct proto_ta_type *ta_type, int64_t ta_id,
-                           const char *log_ref, proto_response_cb cb,
-			   void *user)
+struct proto_ta *create_ta(const struct proto_ta_type *ta_type,
+			   int64_t ta_id, const char *log_ref,
+			   proto_response_cb cb, void *user)
 {
     struct proto_ta *ta = ut_malloc(sizeof(struct proto_ta));
 
@@ -226,7 +226,7 @@ struct msg *proto_ta_produce_request(struct proto_ta *ta, ...)
 
     json_t *request = create_request(ta->type->cmd, ta->ta_id);
 
-    struct proto_field *fields = ta->type->request_fields;
+    const struct proto_field *fields = ta->type->request_fields;
 
     va_list ap;
     va_start(ap, ta);
@@ -365,7 +365,8 @@ static struct paf_props *json_to_props(json_t *json_props, const char* log_ref)
     return NULL;
 }
 
-static void free_fields(struct proto_field *fields, void **args, size_t num_args)
+static void free_fields(const struct proto_field *fields,
+			void **args, size_t num_args)
 {
     size_t i;
     for (i = 0; i < num_args; i++) {
@@ -387,7 +388,7 @@ static void free_fields(struct proto_field *fields, void **args, size_t num_args
     }
 }
 
-static int get_fields(json_t *response, struct proto_field *fields,
+static int get_fields(json_t *response, const struct proto_field *fields,
                       bool opt, const char *log_ref, void **args)
 {
     int num_args = 0;
@@ -497,8 +498,8 @@ static int get_fields(json_t *response, struct proto_field *fields,
 static int ta_consume_response(struct proto_ta *ta,
 			       enum proto_msg_type msg_type, json_t *response)
 {
-    struct proto_field *fields = NULL;
-    struct proto_field *opt_fields = NULL;
+    const struct proto_field *fields = NULL;
+    const struct proto_field *opt_fields = NULL;
 
     if (msg_type == proto_msg_type_accept &&
 	ta->state == proto_ta_state_requesting &&
