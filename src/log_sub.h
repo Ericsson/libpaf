@@ -19,9 +19,9 @@
 			     props, ttl, orphan_since, match_type_str)	\
     do {                                                                \
         char buf[1024];							\
-	ut_snprintf(buf, sizeof(buf), "Received server type \"%s\" "	\
-		    "match for service id 0x%"PRIx64".", match_type_str, \
-		    service_id);					\
+	snprintf(buf, sizeof(buf), "Received server type \"%s\" "	\
+		 "match for service id 0x%"PRIx64".", match_type_str,	\
+		 service_id);						\
 	if (generation != NULL)						\
 	    ut_aprintf(buf, sizeof(buf), " Generation: %"PRId64".",	\
 		       *generation);					\

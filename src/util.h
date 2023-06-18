@@ -31,11 +31,6 @@ void ut_aprintf(char *buf, size_t capacity, const char *format, ...)
 void ut_vaprintf(char *buf, size_t capacity, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
 
-int ut_snprintf(char *buf, size_t capacity, const char *format, ...)
-    __attribute__ ((format (printf, 3, 4)));
-int ut_vsnprintf(char *buf, size_t capacity, const char *format, va_list ap)
-    __attribute__ ((format (printf, 3, 0)));
-
 double ut_timespec_to_f(const struct timespec *ts);
 void ut_f_to_timespec(double t, struct timespec *ts);
 

@@ -45,8 +45,7 @@ static void format_line(char *buf, size_t capacity,
 {
     char bname[strlen(file)+1];
     strcpy(bname, file);
-    ut_snprintf(buf, capacity, "%s [%s:%d]: ", function, basename(bname),
-		line);
+    snprintf(buf, capacity, "%s [%s:%d]: ", function, basename(bname), line);
 }
 
 static void log_console(const char *file, int line, const char *function,
@@ -55,7 +54,7 @@ static void log_console(const char *file, int line, const char *function,
     if (console_log) {
 	UT_SAVE_ERRNO;
 	char buf[BUFSZ];
-        ut_snprintf(buf, sizeof(buf), "<%s> ", prefix);
+        snprintf(buf, sizeof(buf), "<%s> ", prefix);
         format_line(buf, sizeof(buf), file, line, function);
         ut_vaprintf(buf, sizeof(buf), format, ap);
         fprintf(stderr, "%s\n", buf);

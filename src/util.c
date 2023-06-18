@@ -109,30 +109,7 @@ void ut_vaprintf(char *buf, size_t capacity, const char *format, va_list ap)
     if (left == 0)
         return;
 
-    ut_vsnprintf(buf + len, left, format, ap);
-}
-
-int ut_snprintf(char *buf, size_t capacity, const char *format, ...)
-{
-    va_list ap;
-    va_start(ap, format);
-
-    int rc = ut_vsnprintf(buf, capacity, format, ap);
-
-    va_end(ap);
-
-    return rc;
-}
-
-int ut_vsnprintf(char *buf, size_t capacity, const char *format, va_list ap)
-{
-    int rc = vsnprintf(buf, capacity, format, ap);
-
-    /* guarantee NUL-terminated strings */
-    if (rc >= (ssize_t)capacity)
-	buf[capacity - 1] = '\0';
-
-    return rc;
+    vsnprintf(buf + len, left, format, ap);
 }
 
 double ut_timespec_to_f(const struct timespec *ts)
