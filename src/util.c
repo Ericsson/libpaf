@@ -26,7 +26,7 @@ static void alloc_failure(void)
     abort();
 }    
 
-static void assure_alloc_success(const void* ptr)
+static void assure_alloc_success(void* ptr)
 {
     /* Attempting to handle out-of-memory conditions is generally a
        bad idea (on the process-level). It's a much more robust
