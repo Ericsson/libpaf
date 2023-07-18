@@ -18,6 +18,7 @@ def usage(name):
     print("Commands:")
     print("    assure-up")
     print("    assure-client-from <remote-addr>")
+    print("    assure-client-count <count>")
     print("    assure-service <service-id> [<prop-name> <prop-value> ...]")
     print("    assure-service-count <count>")
     print("    assure-subscription <subscription-id> <filter>")
@@ -39,6 +40,17 @@ def assure_client_from(conn, *args):
         if remote_addr == client[1]:
             sys.exit(0)
     sys.exit(1)
+
+def assure_client_count(conn, *args):
+    expected_count = int(args[0])
+
+    # tclient should not be included in count
+    num_clients = len(conn.clients()) - 1
+
+    if expected_count == num_clients:
+        sys.exit(0)
+    else:
+        sys.exit(1)
 
 def parse_props(args):
     if len(args) % 2 != 0:
@@ -112,6 +124,8 @@ if cmd == 'assure-up':
     fun = assure_up
 elif cmd == 'assure-client-from':
     fun = assure_client_from
+elif cmd == 'assure-client-count':
+    fun = assure_client_count
 elif cmd == 'assure-service':
     fun = assure_service
 elif cmd == 'assure-service-count':

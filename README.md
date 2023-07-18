@@ -19,7 +19,7 @@ The Pathfinder Client Library is implemented in C.
 Dependencies:
 
 * libjansson
-* libxcm 1.2.0 or later (i.e., API version 0.16 or higher)
+* libxcm 1.5.0 or later (i.e., API version 0.20 or higher)
 * Automake
 
 To build and install libpaf, run:

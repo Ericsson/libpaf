@@ -171,6 +171,21 @@ extern "C" {
  * by setting the @c PAF_RECONNECT_MIN and/or @c PAF_RECONNECT_MAX
  * environment variables.
  *
+ * @section multihoming DNS and Multihomed Servers
+ *
+ * When a TCP-based transport is used to reach a server, and the
+ * address configured in libpaf includes a DNS hostname resolving to
+ * multiple A and/or AAAA records, libpaf will interpret that as a
+ * single, multi-homed server.
+ *
+ * libpaf will attempt to reach the server via all available IP
+ * addresses, but will use only a single TCP connection for the actual
+ * Pathfinder protocol signaling.
+ *
+ * Multihomed servers are only supported when libpaf is running linked
+ * to XCM v1.9.0 (or later). For older XCM versions, libpaf will pick
+ * only single IP address to connect to.
+ *
  * @section ttl Service TTL
  *
  * A service publish using @c libpaf has a time-to-live (TTL) of 30

@@ -6,6 +6,8 @@
 #include <assert.h>
 #include <string.h>
 #include <time.h>
+#include <xcm_version.h>
+#include <xcm_addr.h>
 
 #include "conf.h"
 #include "list.h"
@@ -775,12 +777,37 @@ static void restart(struct link *link)
     assure_reconnect_tmo(link);
 }
 
+static bool is_tcp_based(const char *addr)
+{
+    const char *tls_based_protos[] = { "tcp", "tls", "utls" };
+
+    size_t i;
+    for (i = 0; i < UT_ARRAY_LEN(tls_based_protos); i++) {
+	const char *proto = tls_based_protos[i];
+
+	if (strncmp(proto, addr, strlen(proto)) == 0)
+	    return true;
+    }
+
+    return false;
+}
+
 static void add_non_null(struct xcm_attr_map *attrs,
 			 const char *attr_name,
 			 const char *attr_value)
 {
     if (attr_value != NULL)
 	xcm_attr_map_add_str(attrs, attr_name, attr_value);
+}
+
+static void consider_adding_dns_attrs(const char *addr,
+				      struct xcm_attr_map *attrs)
+{
+    bool supports_dns_algorithm_attr =
+	xcm_version_api_major() > 0 || xcm_version_api_minor();
+
+    if (supports_dns_algorithm_attr && is_tcp_based(addr))
+	xcm_attr_map_add_str(attrs, "dns.algorithm", "happy_eyeballs");
 }
 
 static void try_connect(struct link *link)
@@ -813,6 +840,8 @@ static void try_connect(struct link *link)
     struct xcm_attr_map *attrs = xcm_attr_map_create();
 
     xcm_attr_map_add_bool(attrs, "xcm.blocking", false);
+
+    consider_adding_dns_attrs(link->server->addr, attrs);
 
     add_non_null(attrs, "xcm.local_addr", link->server->local_addr);
 

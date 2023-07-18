@@ -78,4 +78,6 @@ int ut_net_ns_return(int old_ns_fd);
         }                                                               \
     }
 
+#define UT_ARRAY_LEN(ary) (sizeof(ary) / sizeof(ary[0]))
+
 #endif

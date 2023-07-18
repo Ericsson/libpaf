@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <xcm.h>
 #include <xcm_addr.h>
+#include <xcm_version.h>
 
 #include "testutil.h"
 #include "utest.h"
@@ -602,6 +603,12 @@ static int assure_client_from(struct server *server,
 			      const char *client_remote_addr)
 {
     return tclient(server, "assure-client-from %s", client_remote_addr);
+}
+
+static int assure_client_count(struct server *server, int count)
+
+{
+    return tclient(server, "assure-client-count %d", count);
 }
 
 static int server_assure_service(struct server *server, int64_t service_id,
@@ -1763,6 +1770,58 @@ TESTCASE(paf, local_addr)
 
     return UTEST_SUCCESS;
 }
+
+#if XCM_VERSION_API_MAJOR >= 1 || XCM_VERSION_API_MINOR >= 23
+
+#define DNS_MANY_LOCALHOST "local.friendlyfire.se"
+
+TESTCASE(paf, multi_homed_server)
+{
+    uint16_t port = gen_tcp_port();
+    char server_server_addr[128];
+    char client_server_addr[128];
+
+    /* DNS_LOCALHOST resolves to a number of local addresses,
+       including 127.0.0.2. */
+    snprintf(server_server_addr, sizeof(server_server_addr),
+	     "tcp:127.0.0.2:%d", port);
+
+    /* Client will use DNS, which will produce a number of IP
+       addresses for this particular name. All IPs should be tried,
+       until XCM gives up, since "dns.algorithm" should be set to
+       "happy_eyeballs" (although "sequential" will also do, for the
+       purpose of this test). */
+    snprintf(client_server_addr, sizeof(client_server_addr),
+	     "tcp:%s:%d", DNS_MANY_LOCALHOST, port);
+
+    struct server server_server = {
+	.addr = server_server_addr,
+	.pid = -1
+    };
+
+    struct server client_server = {
+	.addr = client_server_addr,
+	.pid = -1
+    };
+
+    CHKNOERR(server_start(&server_server));
+
+    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL, NULL,
+				    &client_server, 1));
+
+    struct paf_context *context = paf_attach(domain_name);
+
+    do {
+	CHKNOERR(wait_for(context, 0.1));
+    } while (assure_client_count(&server_server, 1) < 0);
+
+    paf_close(context);
+
+    return UTEST_SUCCESS;
+}
+
+#endif
+
 
 TESTCASE(paf, escape)
 {
