@@ -605,6 +605,7 @@ static int assure_client_from(struct server *server,
     return tclient(server, "assure-client-from %s", client_remote_addr);
 }
 
+
 static int assure_client_count(struct server *server, int count)
 
 {
@@ -1771,12 +1772,16 @@ TESTCASE(paf, local_addr)
     return UTEST_SUCCESS;
 }
 
-#if XCM_VERSION_API_MAJOR >= 1 || XCM_VERSION_API_MINOR >= 23
-
 #define DNS_MANY_LOCALHOST "local.friendlyfire.se"
 
 TESTCASE(paf, multi_homed_server)
 {
+    bool supports_dns_algorithm_attr =
+	xcm_version_api_major() >= 1 || xcm_version_api_minor() >= 24;
+
+    if (!supports_dns_algorithm_attr)
+	return UTEST_NOT_RUN;
+
     uint16_t port = gen_tcp_port();
     char server_server_addr[128];
     char client_server_addr[128];
@@ -1819,9 +1824,6 @@ TESTCASE(paf, multi_homed_server)
 
     return UTEST_SUCCESS;
 }
-
-#endif
-
 
 TESTCASE(paf, escape)
 {

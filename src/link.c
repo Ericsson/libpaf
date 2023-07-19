@@ -804,7 +804,7 @@ static void consider_adding_dns_attrs(const char *addr,
 				      struct xcm_attr_map *attrs)
 {
     bool supports_dns_algorithm_attr =
-	xcm_version_api_major() > 0 || xcm_version_api_minor();
+	xcm_version_api_major() >= 1 || xcm_version_api_minor() >= 24;
 
     if (supports_dns_algorithm_attr && is_tcp_based(addr))
 	xcm_attr_map_add_str(attrs, "dns.algorithm", "happy_eyeballs");

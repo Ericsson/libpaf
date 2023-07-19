@@ -53,7 +53,7 @@ extern "C" {
  * paf_attach() with the appropriate service discovery domain name. It
  * need not know what servers are currently serving that domain.
  *
- * @subsection domain_mapping Domain Configuration
+ * @subsection domain_conf Domain Configuration
  *
  * The mapping between a service discovery domain name and the set of
  * addresses to the Pathfinder servers serving this domain is kept in
@@ -173,18 +173,20 @@ extern "C" {
  *
  * @section multihoming DNS and Multihomed Servers
  *
- * When a TCP-based transport is used to reach a server, and the
- * address configured in libpaf includes a DNS hostname resolving to
- * multiple A and/or AAAA records, libpaf will interpret that as a
- * single, multi-homed server.
+ * The host part of the XCM server address in the @ref domain_conf may
+ * either be a DNS hostname or an IP address in string format. If a
+ * Pathfinder server DNS hostname resolves to multiple A or AAAA
+ * records, @c libpaf will interpret that as a single, multihomed,
+ * server.
  *
- * libpaf will attempt to reach the server via all available IP
- * addresses, but will use only a single TCP connection for the actual
- * Pathfinder protocol signaling.
+ * In such a scenario, @c libpaf will attempt to establish a TCP
+ * connection the server via all available IP addresses, but will
+ * employ only at most one connection for the actual Pathfinder
+ * protocol signaling. The Happy Eyeballs (RFC 6555) method is used.
  *
- * Multihomed servers are only supported when libpaf is running linked
- * to XCM v1.9.0 (or later). For older XCM versions, libpaf will pick
- * only single IP address to connect to.
+ * Multihomed servers are only supported when @c libpaf is running
+ * linked to XCM v1.9.0 (or later). For older XCM versions, only the
+ * first (i.e., most preferred) IP address will be considered.
  *
  * @section ttl Service TTL
  *
