@@ -103,12 +103,17 @@ extern "C" {
  * @c CAP_SYS_ADMIN capability. The network namespace needs to be
  * named as per iproute2 conventions.
  *
- * In case the transport protocol uses TLS, three optional keys may be
- * present in the server object:
+ * In case the transport protocol uses TLS, a number of optional keys
+ * may be present in the server object:
  *
  * - "tlsCertificateFile": the leaf certificate to use.
  * - "tlsKeyFile": the private key corresponding to the leaf certificate.
  * - "tlsTrustedCaFile": a file containing the trusted CA certificates.
+ * - "tlsCrlFile": a file containing Certificate Revocation Lists (CRLs).
+ *
+ * Setting tlsCrlFile will enable certificate revocation verification,
+ * and requires @c libpaf to be linked to @c libxcm version v1.9.0 or
+ * later.
  *
  * In case some/all of the certificate file related keys are left out,
  * @c libpaf will fall back to using the XCM defaults.

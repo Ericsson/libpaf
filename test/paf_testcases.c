@@ -43,6 +43,9 @@ static bool is_in_valgrind(void)
 #define CLIENT_KEY CLIENT_CERT_DIR "/key.pem"
 #define CLIENT_TC CLIENT_CERT_DIR "/tc.pem"
 
+#define EMPTY_CRL CLIENT_CERT_DIR "/empty-crl.pem"
+#define REVOKED_SERVER_CERT_CRL CLIENT_CERT_DIR "/revoked-server-crl.pem"
+
 #define UNTRUSTED_CLIENT_CERT_DIR CERT_BASE_DIR "/untrusted_client"
 #define UNTRUSTED_CLIENT_CERT UNTRUSTED_CLIENT_CERT_DIR "/cert.pem"
 #define UNTRUSTED_CLIENT_KEY UNTRUSTED_CLIENT_CERT_DIR "/key.pem"
@@ -290,6 +293,7 @@ static int write_json_domain_file(const char *filename,
 				  const char *cert_file,
 				  const char *key_file,
 				  const char *tc_file,
+				  const char *crl_file,
 				  struct server *servers, size_t num_servers)
 {
     FILE *domains_file = fopen(filename, "w");
@@ -300,7 +304,7 @@ static int write_json_domain_file(const char *filename,
     fprintf(domains_file, "{\n  \"servers\": [\n");
 
     if (cert_file != NULL && key_file != NULL && tc_file != NULL &&
-	unsetenv("XCM_TLS_CERT") < 0)
+	crl_file != NULL && unsetenv("XCM_TLS_CERT") < 0)
 	return -1;
 
     int i;
@@ -326,6 +330,9 @@ static int write_json_domain_file(const char *filename,
 	if (is_tls(server->addr) && tc_file != NULL)
 	    fprintf(domains_file, ",\n"
 		    "      \"tlsTrustedCaFile\": \"%s\"", tc_file);
+	if (is_tls(server->addr) && crl_file != NULL)
+	    fprintf(domains_file, ",\n"
+		    "      \"tlsCrlFile\": \"%s\"", crl_file);
 
 	fprintf(domains_file, "\n"
 		"    }");
@@ -421,10 +428,10 @@ static int domain_setup(unsigned int setup_flags)
 	if (tls_conf)
 	    CHKNOERR(write_json_domain_file(domains_filename, CLIENT_CERT,
 					    CLIENT_KEY, CLIENT_TC,
-					    servers, NUM_SERVERS));
+					    NULL, servers, NUM_SERVERS));
 	else
 	    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL,
-					    NULL, servers, NUM_SERVERS));
+					    NULL, NULL, servers, NUM_SERVERS));
     }
 
     return UTEST_SUCCESS;
@@ -643,6 +650,20 @@ static int assure_client_count(struct server *server, int count)
 
 {
     return tclient(server, "assure-client-count %d", count);
+}
+
+static int wait_for_client_count(struct paf_context *context, double duration,
+				 struct server *server, int count)
+{
+    double deadline = ut_ftime(CLOCK_REALTIME) + duration;
+    for (;;) {
+	int rc = assure_client_count(server, count);
+	if (rc == 0)
+	    return UTEST_SUCCESS;
+	if (ut_ftime(CLOCK_REALTIME) > deadline)
+	    return UTEST_FAILED;
+	wait_for(context, 0.1);
+    }
 }
 
 static int server_assure_service(struct server *server, int64_t service_id,
@@ -1615,10 +1636,9 @@ TESTCASE(paf, change_domain_tls_conf)
     };
 
     CHKNOERR(write_json_domain_file(domains_filename,
-				     UNTRUSTED_CLIENT_CERT,
-				     UNTRUSTED_CLIENT_KEY,
-				     UNTRUSTED_CLIENT_TC,
-				     &server, 1));
+				    UNTRUSTED_CLIENT_CERT, UNTRUSTED_CLIENT_KEY,
+				    UNTRUSTED_CLIENT_TC, NULL,
+				    &server, 1));
 
     struct paf_context *context = paf_attach(domain_name);
 
@@ -1634,7 +1654,7 @@ TESTCASE(paf, change_domain_tls_conf)
 
 
     CHKNOERR(write_json_domain_file(domains_filename, CLIENT_CERT, CLIENT_KEY,
-				     CLIENT_TC, &server, 1));
+				    CLIENT_TC, NULL, &server, 1));
 
     CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
 
@@ -1645,6 +1665,48 @@ TESTCASE(paf, change_domain_tls_conf)
     paf_detach(context);
 
     paf_props_destroy(props);
+    paf_close(context);
+
+    ut_free(tls_addr);
+
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(paf, certificate_revocation)
+{
+    bool supports_crl_attr =
+	xcm_version_api_major() >= 1 || xcm_version_api_minor() >= 24;
+
+    if (!supports_crl_attr)
+	return UTEST_NOT_RUN;
+
+    char *tls_addr = random_tls_addr();
+
+    struct server server = {
+	.addr = tls_addr,
+	.pid = -1
+    };
+
+    CHKNOERR(write_json_domain_file(domains_filename,
+				    CLIENT_CERT, CLIENT_KEY,
+				    CLIENT_TC, EMPTY_CRL,
+				    &server, 1));
+
+    CHKNOERR(server_start(&server));
+
+    struct paf_context *context = paf_attach(domain_name);
+
+    CHKNOERR(wait_for_client_count(context, 2, &server, 1));
+
+    CHKNOERR(write_json_domain_file(domains_filename,
+				    CLIENT_CERT, CLIENT_KEY,
+				    CLIENT_TC, REVOKED_SERVER_CERT_CRL,
+				    &server, 1));
+
+    CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
+
+    CHKNOERR(assure_client_count(&server, 0));
+
     paf_close(context);
 
     ut_free(tls_addr);
@@ -1796,7 +1858,7 @@ TESTCASE(paf, local_addr)
 
     CHKNOERR(server_start(&server));
 
-    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL, NULL,
+    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL, NULL, NULL,
 				    &server, 1));
 
     struct paf_context *context = paf_attach(domain_name);
@@ -1852,7 +1914,7 @@ TESTCASE(paf, multi_homed_server)
 
     CHKNOERR(server_start(&server_server));
 
-    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL, NULL,
+    CHKNOERR(write_json_domain_file(domains_filename, NULL, NULL, NULL, NULL,
 				    &client_server, 1));
 
     struct paf_context *context = paf_attach(domain_name);

@@ -46,7 +46,7 @@ static int add_server(struct domain_conf *conf, const char *filename,
 		      const char *net_ns, const char *addr,
 		      const char *local_addr, const char *cert_file,
 		      const char *key_file, const char *tc_file,
-		      const char *log_ref)
+		      const char *crl_file, const char *log_ref)
 {
     char proto[64];
 
@@ -66,7 +66,7 @@ static int add_server(struct domain_conf *conf, const char *filename,
 
     conf->servers[conf->num_servers] =
 	server_conf_create(net_ns, addr, local_addr, cert_file, key_file,
-			   tc_file);
+			   tc_file, crl_file);
 
     conf->num_servers = new_num_servers;
 
@@ -92,7 +92,7 @@ static struct domain_conf *custom_to_conf(const char *filename,
 
 	if (strlen(start) > 0 && !ut_str_begins_with(start, COMMENT_CHAR)
 	    && add_server(conf, filename, NULL, start, NULL, NULL, NULL, NULL,
-			  log_ref) < 0) {
+			  NULL, log_ref) < 0) {
 	    domain_conf_destroy(conf);
 	    return NULL;
 	}
@@ -179,15 +179,17 @@ static struct domain_conf *json_to_conf(const char *filename,
 	const char *tc_file =
 	    get_server_key(filename, server, "tlsTrustedCaFile", false,
 			   log_ref);
+	const char *crl_file =
+	    get_server_key(filename, server, "tlsCrlFile", false, log_ref);
 
 	if (!is_tls_addr(addr) && (cert_file != NULL || key_file != NULL ||
-				   tc_file != NULL)) {
+				   tc_file != NULL || crl_file != NULL)) {
 	    log_domain_conf_tls_conf_for_non_tls(log_ref, filename, addr);
 	    goto err_free_conf;
 	}
 
 	if (add_server(conf, filename, net_ns, addr, local_addr, cert_file,
-		       key_file, tc_file, log_ref) < 0)
+		       key_file, tc_file, crl_file, log_ref) < 0)
 	    goto err_free_conf;
     }
 

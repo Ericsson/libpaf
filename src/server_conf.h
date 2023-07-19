@@ -11,6 +11,7 @@ struct server_conf
     char *cert_file;
     char *key_file;
     char *tc_file;
+    char *crl_file;
 };
 
 struct server_conf *server_conf_create(const char *net_ns,
@@ -18,7 +19,8 @@ struct server_conf *server_conf_create(const char *net_ns,
 				       const char *local_addr,
 				       const char *cert_file,
 				       const char *key_file,
-				       const char *tc_file);
+				       const char *tc_file,
+				       const char *crl_file);
 void server_conf_destroy(struct server_conf *server);
 
 bool server_conf_equals(const struct server_conf *server0,

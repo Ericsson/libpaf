@@ -22,6 +22,14 @@ certs:
     subject_name: localhost
     issuer: server-root
 
+crls:
+  empty-crl:
+    issuer: server-root
+    revokes: []
+  revoked-server-crl:
+    issuer: server-root
+    revokes: [server]
+
 files:
   - type: cert
     id: client
@@ -34,6 +42,13 @@ files:
       - server-root
     paths:
       - client/tc.pem
+
+  - type: crl
+    id: empty-crl
+    path: client/empty-crl.pem
+  - type: crl
+    id: revoked-server-crl
+    path: client/revoked-server-crl.pem
 
   - type: cert
     id: untrusted-client

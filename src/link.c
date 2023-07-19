@@ -849,6 +849,11 @@ static void try_connect(struct link *link)
     add_non_null(attrs, "tls.key_file", link->server->key_file);
     add_non_null(attrs, "tls.tc_file", link->server->tc_file);
 
+    if (link->server->crl_file != NULL)  {
+	xcm_attr_map_add_bool(attrs, "tls.check_crl", true);
+	xcm_attr_map_add_str(attrs, "tls.crl_file", link->server->crl_file);
+    }
+
     link->conn = xcm_connect_a(link->server->addr, attrs);
 
     xcm_attr_map_destroy(attrs);
