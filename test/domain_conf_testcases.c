@@ -26,7 +26,7 @@ static void gen_domain(char *domain, size_t capacity)
     domain[len] = '\0';
 }
 
-static int setup(void)
+static int setup(unsigned setup_flags)
 {
     snprintf(domain_dir, sizeof(domain_dir), "./test/domains.d-%d", getpid());
     gen_domain(domain_name, sizeof(domain_name));
@@ -34,12 +34,12 @@ static int setup(void)
     CHKNOERR(tu_executef_es("mkdir -p %s", domain_dir));
 
     if (setenv("PAF_DOMAINS", domain_dir, 1) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     return UTEST_SUCCESS;
 }
 
-static int teardown(void)
+static int teardown(unsigned setup_flags)
 {
     tu_executef("rm -f %s/%s", domain_dir, domain_name);
     tu_executef("rmdir %s", domain_dir);

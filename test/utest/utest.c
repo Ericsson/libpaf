@@ -3,22 +3,23 @@
  * Copyright(c) 2020 Ericsson AB
  */
 
+#include "utest.h"
+
+#include "utesthumanreport.h"
+#include "utestreport.h"
+
+#include <assert.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/prctl.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/time.h>
 #include <time.h>
-#include <stdbool.h>
-#include <assert.h>
-
-#include "utest.h"
-#include "utestreport.h"
-#include "utesthumanreport.h"
+#include <unistd.h>
 
 #define MAX_NUM_SUITES (100)
 
@@ -26,7 +27,7 @@ static struct testsuite suites[MAX_NUM_SUITES];
 static size_t suites_len = 0;
 
 void testsuite_register(const char *name,
-                        utest_setup_fun setup, utest_teardown_fun teardown)
+			utest_setup_fun setup, utest_teardown_fun teardown)
 {
     struct testsuite *suite = &suites[suites_len];
     suite->name = name;
@@ -36,12 +37,12 @@ void testsuite_register(const char *name,
     assert(suites_len <= MAX_NUM_SUITES);
 }
 
-struct testsuite *lookup_suite(const char *name)
+static struct testsuite *lookup_suite(const char *name)
 {
     size_t i;
     for (i=0; i<suites_len; i++)
-        if (strcmp(suites[i].name, name) == 0)
-            return &suites[i];
+	if (strcmp(suites[i].name, name) == 0)
+	    return &suites[i];
     return NULL;
 }
 
@@ -51,21 +52,28 @@ static struct testcase tcs[MAX_NUM_TCS];
 static size_t tcs_len = 0;
 
 void testcase_register(const char *suite_name, const char *name,
-                       int (*fun)(void), bool serialized, double timeout)
+		       int (*fun)(void), bool serialized, double timeout,
+		       unsigned setup_flags)
 {
     struct testsuite *suite = lookup_suite(suite_name);
     if (!suite) {
-        fprintf(stderr, "Testcase \"%s\" is said to belong to non-existing "
-                "suite \"%s\".", name, suite_name);
-        abort();
+	fprintf(stderr, "Testcase \"%s\" is configured to belong to "
+		"non-existing suite \"%s\".", name, suite_name);
+	abort();
     }
     struct testcase *tc = &tcs[tcs_len];
-    tc->suite = suite;
-    tc->name = name;
-    tc->fun = fun;
-    tc->serialized = serialized;
-    tc->timeout = timeout;
+
+    *tc = (struct testcase) {
+	.suite = suite,
+	.name = name,
+	.fun = fun,
+	.serialized = serialized,
+	.timeout = timeout,
+	.setup_flags = setup_flags
+    };
+
     tcs_len++;
+
     assert(tcs_len <= MAX_NUM_TCS);
 }
 
@@ -78,7 +86,7 @@ static void usage(const char* prg_name)
 	   "  -l        List all testcases.\n"
 	   "  -c        Use color for result output.\n"
 	   "  -v        Give more verbose test report.\n"
-           "  -p <num>  Run test up to <num> test cases in parallel.\n");
+	   "  -p <num>  Run test up to <num> test cases in parallel.\n");
 }
 
 static void handler_nop(int s) {
@@ -90,11 +98,11 @@ static bool valid_ret_code(int code)
     case UTEST_SUCCESS:
     case UTEST_NOT_RUN:
     case UTEST_TIMED_OUT:
-    case UTEST_FAIL:
+    case UTEST_FAILED:
     case UTEST_CRASHED:
-        return true;
+	return true;
     default:
-        return false;
+	return false;
     }
 }
 
@@ -115,14 +123,19 @@ static int worst_code(int a_rc, int b_rc)
 
 static int exec_tc(struct testcase *tc)
 {
-    int setup_rc = tc->suite->setup ? tc->suite->setup() : UTEST_SUCCESS;
-    if (setup_rc != UTEST_SUCCESS)
-	return setup_rc;
+    if (tc->suite->setup != NULL) {
+	int setup_rc = tc->suite->setup(tc->setup_flags);
+
+	if (setup_rc != UTEST_SUCCESS)
+	    return setup_rc;
+    }
 
     int tc_rc = tc->fun();
 
-    int teardown_rc =
-        tc->suite->teardown ? tc->suite->teardown() : UTEST_SUCCESS;
+    int teardown_rc = UTEST_SUCCESS;
+
+    if (tc->suite->teardown != NULL)
+	teardown_rc = tc->suite->teardown(tc->setup_flags);
 
     return worst_code(tc_rc, teardown_rc);
 }
@@ -141,12 +154,12 @@ double utest_ftime(void)
     return t.tv_sec+((double)t.tv_nsec)/1e9;
 }
 
-void set_proc_name(struct testcase *tc)
+static void set_proc_name(struct testcase *tc)
 {
     char name[16];
     if (snprintf(name, sizeof(name), "%s:%s", tc->suite->name, tc->name) >=
-        sizeof(name)) {
-        name[sizeof(name)-1] = '\0';
+	sizeof(name)) {
+	name[sizeof(name)-1] = '\0';
     }
     prctl(PR_SET_NAME, name);
 }
@@ -158,113 +171,111 @@ static void forked_start_exec(struct testcase *tc, struct testexec *te)
 	perror("Error while forking");
 	exit(EXIT_FAILURE);
     } else if (p == 0) {
-        /* make sure child processes die, if test case process
-           exists */
-        signal(SIGCHLD, SIG_DFL);
+	/* make sure child processes die, if test case process
+	   exists */
+	signal(SIGCHLD, SIG_DFL);
 
-        set_proc_name(tc);
-
-        errno = 0;
+	set_proc_name(tc);
 
 	int rc = exec_tc(tc);
-        if (!valid_ret_code(rc)) {
-            fprintf(stderr, "Warning: testcase %s provided invalid "
-                    "return code.\n", tc->name);
-            rc = UTEST_FAIL;
-        }
-        exit(ret_code_to_exit_code(rc));
+	if (!valid_ret_code(rc)) {
+	    fprintf(stderr, "Warning: testcase %s provided invalid "
+		    "return code.\n", tc->name);
+	    rc = UTEST_FAILED;
+	}
+	exit(ret_code_to_exit_code(rc));
     } else {
-        te->tc = tc;
-        te->pid = p;
-        te->start_time = utest_ftime();
-        te->running = true;
+	te->tc = tc;
+	te->pid = p;
+	te->start_time = utest_ftime();
+	te->running = true;
     }
 }
 
 static void forked_gather_result(struct testexec *te,
-                                 struct utest_report *report)
+				 struct utest_report *report)
 {
     siginfo_t info;
     if (waitid(P_PID, te->pid, &info, WNOHANG|WEXITED) == 0) {
-        const double exec_time = utest_ftime() - te->start_time;
-        switch (info.si_code) {
-        case CLD_EXITED: {
-            te->running = false;
-            utest_report_tc_end(report, te->tc,
-                                exit_code_to_ret_code(info.si_status),
-                                exec_time);
-            break;
-        }
-        case CLD_KILLED:
-        case CLD_DUMPED:
-            te->running = false;
-            utest_report_tc_end(report, te->tc, UTEST_CRASHED, exec_time);
-        }
+	const double exec_time = utest_ftime() - te->start_time;
+	switch (info.si_code) {
+	case CLD_EXITED: {
+	    te->running = false;
+	    utest_report_tc_end(report, te->tc,
+				exit_code_to_ret_code(info.si_status),
+				exec_time);
+	    break;
+	}
+	case CLD_KILLED:
+	case CLD_DUMPED:
+	    te->running = false;
+	    utest_report_tc_end(report, te->tc, UTEST_CRASHED, exec_time);
+	}
     } else
-        perror("waitid");
+	perror("waitid");
 }
 
 static void gather_infos(struct testexec *execs, size_t execs_len,
-                         struct utest_report *report)
+			 struct utest_report *report)
 {
     for (size_t i = 0; i < execs_len; i++)
-        if (execs[i].running)
-            forked_gather_result(&execs[i], report);
+	if (execs[i].running)
+	    forked_gather_result(&execs[i], report);
 }
 
 static void kill_timed_out(struct testexec *execs, size_t execs_len,
-                           struct utest_report *report)
+			   struct utest_report *report)
 {
     for (size_t i = 0; i < execs_len; i++)
-        if (execs[i].running) {
-            const double exec_time = utest_ftime()-execs[i].start_time;
-            if (exec_time > execs[i].tc->timeout) {
-                kill(execs[i].pid, SIGKILL);
-                execs[i].running = false;
-                siginfo_t info;
-                waitid(P_PID, execs[i].pid, &info, WEXITED);
-                utest_report_tc_end(report, execs[i].tc, UTEST_TIMED_OUT,
-                                    exec_time);
-            }
-        }
+	if (execs[i].running) {
+	    const double exec_time = utest_ftime()-execs[i].start_time;
+	    if (exec_time > execs[i].tc->timeout) {
+		kill(execs[i].pid, SIGKILL);
+		execs[i].running = false;
+		siginfo_t info;
+		waitid(P_PID, execs[i].pid, &info, WEXITED);
+		utest_report_tc_end(report, execs[i].tc, UTEST_TIMED_OUT,
+				    exec_time);
+	    }
+	}
 }
 
 static size_t running(struct testexec *execs, size_t execs_len)
 {
     size_t num_running = 0;
     for (size_t i=0; i<execs_len; i++)
-        if (execs[i].running)
-            num_running++;
+	if (execs[i].running)
+	    num_running++;
     return num_running;
 }
 
 static void start_execs(struct testcase **tcs, size_t tcs_len,
-                        struct testexec *execs, size_t *num_started,
-                        size_t max_parallel, struct utest_report *report)
+			struct testexec *execs, size_t *num_started,
+			size_t max_parallel, struct utest_report *report)
 {
     while (*num_started < tcs_len &&
-           running(execs, *num_started) < max_parallel) {
-        struct testexec *new_exec = &execs[*num_started];
-        struct testcase *new_tc = tcs[*num_started];
-        struct testexec *prev_exec =
-            *num_started > 0 ? &execs[*num_started - 1] : NULL;
+	   running(execs, *num_started) < max_parallel) {
+	struct testexec *new_exec = &execs[*num_started];
+	struct testcase *new_tc = tcs[*num_started];
+	struct testexec *prev_exec =
+	    *num_started > 0 ? &execs[*num_started - 1] : NULL;
 
-        /* if upcoming test case is marked as serialized, we need to
-           wait for all other test cases to finish before starting to
-           executing it. In addition, if we are already executing,
-           we can't start more  */
-        if ((new_tc->serialized && running(execs, *num_started) > 0)
-            || (prev_exec && prev_exec->running && prev_exec->tc->serialized))
-            return;
+	/* if upcoming test case is marked as serialized, we need to
+	   wait for all other test cases to finish before starting to
+	   executing it. In addition, if we are already executing,
+	   we can't start more  */
+	if ((new_tc->serialized && running(execs, *num_started) > 0)
+	    || (prev_exec && prev_exec->running && prev_exec->tc->serialized))
+	    return;
 
-        forked_start_exec(new_tc, new_exec);
-        utest_report_tc_start(report, new_tc);
-        (*num_started)++;
+	forked_start_exec(new_tc, new_exec);
+	utest_report_tc_start(report, new_tc);
+	(*num_started)++;
     }
 }
 
 static void forked_run_testcases(struct testcase **tcs, size_t tcs_len,
-                                int max_parallel, struct utest_report *report)
+				int max_parallel, struct utest_report *report)
 {
     /* we need to install a SIGCHLD signal handler, otherwise the sleep
        (see below) won't be interrupted */
@@ -275,17 +286,17 @@ static void forked_run_testcases(struct testcase **tcs, size_t tcs_len,
     size_t num_started = 0;
 
     while (num_started < tcs_len || running(execs, num_started) > 0) {
-        start_execs(tcs, tcs_len, execs, &num_started, max_parallel,
-                    report);
-        
-        kill_timed_out(execs, num_started, report);
-        /* The sleep() will be interrupted by the SIGCHLD (EINTR), and thus
-           won't introduce any latency. However, there is a race condition
-           here, and worst case we get the signal after we've done the
-           waitpid, but before we sleep. But, we'll only sleep for a second,
-           so it's not the end of the world. */
-        sleep(1);
-        gather_infos(execs, num_started, report);
+	start_execs(tcs, tcs_len, execs, &num_started, max_parallel,
+		    report);
+
+	kill_timed_out(execs, num_started, report);
+	/* The sleep() will be interrupted by the SIGCHLD (EINTR), and thus
+	   won't introduce any latency. However, there is a race condition
+	   here, and worst case we get the signal after we've done the
+	   waitpid, but before we sleep. But, we'll only sleep for a second,
+	   so it's not the end of the world. */
+	sleep(1);
+	gather_infos(execs, num_started, report);
     }
 }
 
@@ -295,13 +306,13 @@ static bool match(const char *name, struct testcase *tc) {
     return strcmp(cname, name) == 0;
 }
 
-struct testcase *find_testcase(struct testcase *tcs, size_t tcs_len,
-                               const char *name)
+static struct testcase *find_testcase(struct testcase *tcs, size_t tcs_len,
+				      const char *name)
 {
     for (size_t i=0; i<tcs_len; i++) {
-        struct testcase *tc = &tcs[i];
-        if (match(name, tc))
-            return tc;
+	struct testcase *tc = &tcs[i];
+	if (match(name, tc))
+	    return tc;
     }
     return NULL;
 }
@@ -352,9 +363,9 @@ static size_t select_testcases(struct testcase* tcs, size_t tcs_len,
     size_t selected_tcs_len = 0;
 
     if (names_len == 0) {
-        for (size_t i=0; i<tcs_len; i++)
+	for (size_t i=0; i<tcs_len; i++)
 	    select_tc(selected_tcs, &selected_tcs_len, &tcs[i]);
-        return selected_tcs_len;
+	return selected_tcs_len;
     }
 
     for (size_t i=0; i<names_len; i++) {
@@ -377,7 +388,7 @@ static void print_testcases(struct testcase* tcs, size_t tcs_len)
 {
     size_t i;
     for (i=0; i<tcs_len; i++)
-        printf("%s:%s\n", tcs[i].suite->name, tcs[i].name);
+	printf("%s:%s\n", tcs[i].suite->name, tcs[i].name);
 }
 
 int main(int argc, char** argv)
@@ -388,41 +399,41 @@ int main(int argc, char** argv)
 
     int c;
     while ((c = getopt (argc, argv, "lhvcp:")) != -1) {
-        switch (c) {
-        case 'l':
-            print_testcases(tcs, tcs_len);
-            exit(EXIT_SUCCESS);
-            break;
-        case 'h':
-            usage(argv[0]);
-            exit(EXIT_SUCCESS);
-            break;
-        case 'v':
-            verbose = true;
-            break;
+	switch (c) {
+	case 'l':
+	    print_testcases(tcs, tcs_len);
+	    exit(EXIT_SUCCESS);
+	    break;
+	case 'h':
+	    usage(argv[0]);
+	    exit(EXIT_SUCCESS);
+	    break;
+	case 'v':
+	    verbose = true;
+	    break;
 	case 'c':
 	    color = true;
 	    break;
-        case 'p':
-            max_parallel = atoi(optarg);
-            if (max_parallel < 1) {
-                fprintf(stderr, "Number of parallel testcases allowed "
-                        "must be > 0.\n");
-                exit(EXIT_FAILURE);
-            }
-            break;
-        }
+	case 'p':
+	    max_parallel = atoi(optarg);
+	    if (max_parallel < 1) {
+		fprintf(stderr, "Number of parallel testcases allowed "
+			"must be > 0.\n");
+		exit(EXIT_FAILURE);
+	    }
+	    break;
+	}
     }
 
     struct testcase **selected_tcs = NULL;
     const int num_args = argc-optind;
 
     size_t num_selected = select_testcases(tcs, tcs_len, &argv[optind],
-                                           num_args, &selected_tcs);
+					   num_args, &selected_tcs);
 
     if (num_selected == 0) {
-        printf("No tests to run.\n");
-        exit(EXIT_FAILURE);
+	printf("No tests to run.\n");
+	exit(EXIT_FAILURE);
     }
 
     struct utest_report *report =

@@ -106,9 +106,9 @@ static int server_start(struct server *server)
     pid_t server_pid = run_server(server->net_ns, server->addr);
 
     if (server_pid < 0)
-        return UTEST_FAIL;
+        return UTEST_FAILED;
     if (assure_server_up(server) < 0)
-        return UTEST_FAIL;
+        return UTEST_FAILED;
 
     server->pid = server_pid;
 
@@ -376,7 +376,7 @@ static int domain_setup(void)
 	server->pid = -1;
 
 	if (server->net_ns != NULL && tu_add_net_ns(server->net_ns) < 0)
-	    return UTEST_FAIL;
+	    return UTEST_FAILED;
     }
 
     if (tu_randbool() && !use_net_ns)
@@ -419,29 +419,29 @@ static int setenv_double(const char *name, double value)
     return 0;
 }
 
-static int setup(void)
+static int setup(unsigned int setup_flags)
 {
     int rc = domain_setup();
     if (rc < 0)
 	return rc;
     
     if (setenv("XCM_TLS_CERT", CLIENT_CERT_DIR, 1) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     if (tu_executef_es("test -f %s/cert.pem", CLIENT_CERT_DIR) != 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     if (setenv("PAF_DOMAINS", domains_dir, 1) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     if (setenv_double("PAF_RESCAN", AVG_RESCAN_PERIOD) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     if (setenv_double("PAF_RECONNECT_MAX", PAF_RECONNECT_MAX) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     if (setenv_double("PAF_TTL", TTL) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     return UTEST_SUCCESS;
 }
@@ -468,7 +468,7 @@ static void domain_teardown(void)
     }
 }
 
-static int teardown(void)
+static int teardown(unsigned setup_flags)
 {
     stop_servers();
 
@@ -653,7 +653,7 @@ static int wait_for_service(struct paf_context *context,
 	if (rc == 0)
 	    return UTEST_SUCCESS;
 	if (ut_ftime(CLOCK_REALTIME) > deadline)
-	    return UTEST_FAIL;
+	    return UTEST_FAILED;
 	wait_for(context, 0.1);
     }
 }
@@ -683,7 +683,7 @@ static int wait_for_service_count(struct paf_context *context, double duration,
 	if (rc == 0)
 	    return UTEST_SUCCESS;
 	if (ut_ftime(CLOCK_REALTIME) > deadline)
-	    return UTEST_FAIL;
+	    return UTEST_FAILED;
 	wait_for(context, 0.1);
     }
 }
@@ -1656,9 +1656,9 @@ TESTCASE(paf, reconnect)
     double duration = reconnect_max * 2;
 
     if (setenv_double("PAF_RECONNECT_MAX", reconnect_max) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
     if (setenv_double("PAF_RECONNECT_MIN", reconnect_min) < 0)
-	return UTEST_FAIL;
+	return UTEST_FAILED;
 
     pid_t pid = fake_server(duration, reconnect_min, reconnect_max,
 			    servers[0].addr);
