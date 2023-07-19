@@ -48,7 +48,30 @@ static bool is_in_valgrind(void)
 #define UNTRUSTED_CLIENT_KEY UNTRUSTED_CLIENT_CERT_DIR "/key.pem"
 #define UNTRUSTED_CLIENT_TC UNTRUSTED_CLIENT_CERT_DIR "/tc.pem"
 
-#define REQUIRE_NO_LOCAL_ADDRS (1U << 0)
+#define REQUIRE_NO_LOCAL_PORT_BIND (1U << 0)
+
+static bool is_proto(const char *addr, const char *proto)
+{
+    char actual_proto[16];
+    xcm_addr_parse_proto(addr, actual_proto, sizeof(actual_proto));
+
+    return strcmp(actual_proto, proto) == 0;
+}
+
+static bool is_tcp(const char *addr)
+{
+    return is_proto(addr, XCM_TCP_PROTO);
+}
+
+static bool is_tls(const char *addr)
+{
+    return is_proto(addr, XCM_TLS_PROTO) || is_proto(addr, XCM_UTLS_PROTO);
+}
+
+static bool is_tcp_based(const char *addr)
+{
+    return is_tcp(addr) || is_tls(addr);
+}
 
 static pid_t run_server(const char *net_ns, const char *addr)
 {
@@ -177,9 +200,14 @@ static uint16_t gen_tcp_port(void)
     return tu_randint(15000, 25000);
 }
 
+static char *localhost_port_addr(const char *proto, uint16_t port)
+{
+    return ut_asprintf("%s:127.0.0.1:%d", proto, port);
+}
+
 static char *gen_localhost_port_addr(const char *proto)
 {
-    return ut_asprintf("%s:127.0.0.1:%d", proto, gen_tcp_port());
+    return localhost_port_addr(proto, gen_tcp_port());
 }
 
 static char *random_tls_addr(void)
@@ -211,21 +239,27 @@ static char *random_addr(void)
     }
 }
 
-static char *random_local_addr(const char *addr)
+static char *random_local_addr(const char *addr,
+			       bool force_kernel_allocated_port)
 {
+    if (!is_tcp_based(addr))
+	return NULL;
+
     bool has_local = tu_randbool();
 
     if (!has_local)
 	return NULL;
 
+    uint16_t port;
+    if (force_kernel_allocated_port || tu_randbool())
+	port = 0;
+    else
+	port = gen_tcp_port();
+
     char proto[16];
     xcm_addr_parse_proto(addr, proto, sizeof(proto));
 
-    if (strcmp(proto, XCM_TCP_PROTO) == 0)
-	return random_tcp_addr();
-    else if (strcmp(proto, XCM_TLS_PROTO) == 0)
-	return random_tls_addr();
-    return NULL;
+    return localhost_port_addr(proto, port);
 }
 
 static char *random_net_ns(void)
@@ -250,11 +284,6 @@ static int write_nl_domains_file(const char *filename, struct server *servers,
 	return -1;
 
     return 0;
-}
-
-static bool is_tls(const char *addr)
-{
-    return strncmp("tls", addr, 3) == 0 || strncmp("utls", addr, 4) == 0;
 }
 
 static int write_json_domain_file(const char *filename,
@@ -374,10 +403,9 @@ static int domain_setup(unsigned int setup_flags)
 	    server->net_ns = NULL;
 
 	server->addr = random_addr();
-	if (setup_flags & REQUIRE_NO_LOCAL_ADDRS)
-	    server->local_addr = NULL;
-	else
-	    server->local_addr = random_local_addr(server->addr);
+	server->local_addr =
+	    random_local_addr(server->addr,
+			      setup_flags & REQUIRE_NO_LOCAL_PORT_BIND);
 	server->pid = -1;
 
 	if (server->net_ns != NULL && tu_add_net_ns(server->net_ns) < 0)
@@ -714,7 +742,7 @@ static int assure_subscription(int64_t sub_id, const char *filter)
 TESTSUITE(paf, setup, teardown)
 
 /* See 'match_with_most_servers_down' on why this flag is needed. */
-TESTCASE_F(paf, publish_flaky_servers, REQUIRE_NO_LOCAL_ADDRS)
+TESTCASE_F(paf, publish_flaky_servers, REQUIRE_NO_LOCAL_PORT_BIND)
 {
     struct paf_context *context = paf_attach(domain_name);
 
@@ -959,7 +987,8 @@ bg_publisher(const char *domain_name,
         return pid;
 }
 
-TESTCASE(paf, subscribe_flaky_server)
+/* See 'match_with_most_servers_down' on why this flag is needed. */
+TESTCASE_F(paf, subscribe_flaky_server, REQUIRE_NO_LOCAL_PORT_BIND)
 {
     struct paf_context *context = paf_attach(domain_name);
 
@@ -1044,11 +1073,12 @@ TESTCASE(paf, subscription_match)
 }
 
 /* The scenario tested here does not work reliably when the libpaf
-   client is asked to bind to a local address. If you shut down the
+   client is asked to bind to a local port. If you shut down the
    servers before the connection is accepted, the kernel TCP socket
-   may end up in TIME_WAIT, which will prevent its local address from
-   being reused (regardless of SO_REUSEADDR is set or not). */
-TESTCASE_F(paf, match_with_most_servers_down, REQUIRE_NO_LOCAL_ADDRS)
+   may end up in TIME_WAIT, which will prevent its local socket
+   ([address, port]-combination) from being reused (regardless of
+   SO_REUSEADDR is set or not). */
+TESTCASE_F(paf, match_with_most_servers_down, REQUIRE_NO_LOCAL_PORT_BIND)
 {
     CHKNOERR(start_servers());
 
