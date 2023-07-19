@@ -48,6 +48,8 @@ static bool is_in_valgrind(void)
 #define UNTRUSTED_CLIENT_KEY UNTRUSTED_CLIENT_CERT_DIR "/key.pem"
 #define UNTRUSTED_CLIENT_TC UNTRUSTED_CLIENT_CERT_DIR "/tc.pem"
 
+#define REQUIRE_NO_LOCAL_ADDRS (1U << 0)
+
 static pid_t run_server(const char *net_ns, const char *addr)
 {
     pid_t p = fork();
@@ -350,7 +352,7 @@ static int cert_teardown(const char *ns_name)
     return rc != 0 ? -1 : 0;
 }
 
-static int domain_setup(void)
+static int domain_setup(unsigned int setup_flags)
 {
     domains_dir = ut_asprintf("./test/domains/%d", getpid());
     CHKNOERR(tu_executef_es("mkdir -p %s", domains_dir));
@@ -372,7 +374,10 @@ static int domain_setup(void)
 	    server->net_ns = NULL;
 
 	server->addr = random_addr();
-	server->local_addr = random_local_addr(server->addr);
+	if (setup_flags & REQUIRE_NO_LOCAL_ADDRS)
+	    server->local_addr = NULL;
+	else
+	    server->local_addr = random_local_addr(server->addr);
 	server->pid = -1;
 
 	if (server->net_ns != NULL && tu_add_net_ns(server->net_ns) < 0)
@@ -421,7 +426,7 @@ static int setenv_double(const char *name, double value)
 
 static int setup(unsigned int setup_flags)
 {
-    int rc = domain_setup();
+    int rc = domain_setup(setup_flags);
     if (rc < 0)
 	return rc;
     
@@ -708,7 +713,8 @@ static int assure_subscription(int64_t sub_id, const char *filter)
 
 TESTSUITE(paf, setup, teardown)
 
-TESTCASE(paf, publish_flaky_servers)
+/* See 'match_with_most_servers_down' on why this flag is needed. */
+TESTCASE_F(paf, publish_flaky_servers, REQUIRE_NO_LOCAL_ADDRS)
 {
     struct paf_context *context = paf_attach(domain_name);
 
@@ -1037,7 +1043,12 @@ TESTCASE(paf, subscription_match)
     return UTEST_SUCCESS;
 }
 
-TESTCASE(paf, match_with_most_servers_down)
+/* The scenario tested here does not work reliably when the libpaf
+   client is asked to bind to a local address. If you shut down the
+   servers before the connection is accepted, the kernel TCP socket
+   may end up in TIME_WAIT, which will prevent its local address from
+   being reused (regardless of SO_REUSEADDR is set or not). */
+TESTCASE_F(paf, match_with_most_servers_down, REQUIRE_NO_LOCAL_ADDRS)
 {
     CHKNOERR(start_servers());
 

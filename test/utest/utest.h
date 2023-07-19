@@ -23,7 +23,7 @@
 	int64_t err;							\
 	if ((err = (x)) < 0) {                                          \
 	    fprintf(stderr, "\n%s:%d: Unexpected error code: %d "       \
-		    "(errno %d [%s])\n", __FILE__, __LINE__, err, errno, \
+		    "(errno %d [%s])\n", __FILE__, __LINE__, (int)err, errno, \
 		    strerror(errno));                                   \
 	    return UTEST_FAILED;                                          \
 	}                                                               \
