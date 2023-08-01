@@ -2,7 +2,7 @@
 
 m4_define([paf_major_version], [1])
 m4_define([paf_minor_version], [1])
-m4_define([paf_patch_version], [2])
+m4_define([paf_patch_version], [3])
 m4_define([paf_version],[paf_major_version.paf_minor_version.paf_patch_version])
 
 m4_define([paf_abi_major_version], [m4_eval(paf_major_version - 1)])
