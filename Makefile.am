@@ -109,7 +109,7 @@ paftest-run: testcert paftest
 
 pytest-run: testcert all
 	export PYTHONPATH=$(PWD)/python:$$PYTHONPATH && \
-	export LD_LIBRARY_PATH=$(builddir)/.libs:$$LD_LIBRARY_PATH && \
+	export LD_LIBRARY_PATH=$(PWD)/.libs:$$LD_LIBRARY_PATH && \
 	cd test && \
 	$(PYTEST) -v -s $(PYTESTS)
 
