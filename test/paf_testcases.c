@@ -1231,6 +1231,8 @@ static int test_timeout_ttl(enum timeout_mode mode, int64_t ttl)
     else
         paf_close(pub_context);
 
+    tu_msleep(tu_randint(0, 10));
+
     do {
         if (mode == timeout_mode_server_unavailable)
             CHKNOERR(wait_for(pub_context, 0.01));
@@ -1261,7 +1263,9 @@ static int test_timeout(enum timeout_mode mode)
 	return rc;
     if ((rc = test_timeout_ttl(mode, TTL * 2)) < 0)
 	return rc;
-    return UTEST_SUCCESS;    
+    if ((rc = test_timeout_ttl(mode, 0)) < 0)
+	return rc;
+    return UTEST_SUCCESS;
 }
 
 TESTCASE(paf, match_timeout_after_server_unavailability)
