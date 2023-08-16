@@ -12,7 +12,7 @@
     log_obj_debug(sub, fmt, ##__VA_ARGS__)
 
 #define log_sub_error(sub, fmt, ...)		\
-    log_ob_error(sub, fmt, ##__VA_ARGS__)
+    log_obj_error(sub, fmt, ##__VA_ARGS__)
 
 
 #define log_sub_server_match(sub, service_id, generation,		\
@@ -55,5 +55,9 @@
     log_sub_debug(sub, "Received a stray disappeared message for "	\
 		  "service id 0x%"PRIx64", which was likely an orphan " \
 		  "already locally removed.", service_id)
+
+#define log_sub_invalid_modified(sub, service_id)			\
+    log_sub_error(sub, "Received invalid modified message for unknown "	\
+		  "service id 0x%"PRIx64".")
 
 #endif

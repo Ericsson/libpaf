@@ -54,11 +54,11 @@ static void check_disappearence(struct sub *sub __attribute__((unused)),
     }
 }
 
-void sub_report_match(struct sub *sub, int64_t source_id,
-		      enum paf_match_type match_type,
-		      int64_t service_id, const int64_t *generation,
-		      const struct paf_props *props,
-		      const int64_t *ttl, const double *orphan_since)
+int sub_report_match(struct sub *sub, int64_t source_id,
+		     enum paf_match_type match_type,
+		     int64_t service_id, const int64_t *generation,
+		     const struct paf_props *props,
+		     const int64_t *ttl, const double *orphan_since)
 {
     log_sub_server_match(sub, service_id, generation, props, ttl,
 			 orphan_since, match_type_str(match_type));
@@ -71,10 +71,12 @@ void sub_report_match(struct sub *sub, int64_t source_id,
 	   get stray disappear notifications. */
 	if (match_type == paf_match_type_disappeared) {
 	    log_sub_stray_disappeared(sub, service_id);
-	    return;
+	    return 0;
+	} else if (match_type == paf_match_type_modified) {
+	    log_sub_invalid_modified(sub, service_id);
+	    return -1;
 	}
 
-	assert(match_type == paf_match_type_appeared);
 	match = match_create();
 	LIST_INSERT_HEAD(&sub->matches, match, entry);
     }
@@ -82,6 +84,8 @@ void sub_report_match(struct sub *sub, int64_t source_id,
     match_report(match, source_id, match_type, service_id, generation,
 		 props, ttl, orphan_since, app_match, sub);
     check_disappearence(sub, match);
+
+    return 0;
 }
 
 void sub_orphan_all_from_source(struct sub *sub, int64_t source_id,

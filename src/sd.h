@@ -67,10 +67,10 @@ int64_t sd_add_sub(struct sd *sd, const char *filter_str,
 		   paf_match_cb match_cb, void *user);
 void sd_remove_sub(struct sd *sd, int64_t sub_id);
 struct sub *sd_get_sub(struct sd *sd, int64_t sub_id);
-void sd_report_match(struct sd *sd, int64_t source_id, int64_t sub_id,
-		     enum paf_match_type match_type, int64_t service_id,
-		     const int64_t *generation, const struct paf_props *props,
-		     const int64_t *ttl, const double *orphan_since);
+int sd_report_match(struct sd *sd, int64_t source_id, int64_t sub_id,
+		    enum paf_match_type match_type, int64_t service_id,
+		    const int64_t *generation, const struct paf_props *props,
+		    const int64_t *ttl, const double *orphan_since);
 void sd_orphan_all_from_source(struct sd *sd, int64_t source_id, double now);
 
 struct sd_listener *sd_add_listener(struct sd *sd, sd_listener_cb cb,

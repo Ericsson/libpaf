@@ -1451,10 +1451,14 @@ TESTCASE(paf, no_matches_after_unsubscribe)
     return UTEST_SUCCESS;
 }
 
-static int test_detach(bool with_server, bool manual_unpublish,
-                       size_t service_count)
+#define WITH_SERVER (1U << 0)
+#define MANUAL_UNPUBLISH (1U << 1)
+
+static int test_detach(unsigned flags, size_t service_count)
 {
     struct paf_context *context = paf_attach(domain_name);
+    bool with_server = flags & WITH_SERVER;
+    bool manual_unpublish = flags & MANUAL_UNPUBLISH;
 
     if (with_server)
         CHKNOERR(start_servers());
@@ -1469,18 +1473,35 @@ static int test_detach(bool with_server, bool manual_unpublish,
         CHK(service_ids[i] >= 0);
     }
 
+    int hits = 0;
+    CHKNOERR(paf_subscribe(context, NULL, count_match_cb, &hits));
+
     paf_props_destroy(props);
 
     if (with_server) {
         do {
             CHKNOERR(wait_for(context, 0.1));
-        } while (assure_service_count(service_count) < 0);
+        } while (assure_service_count(service_count) < 0 || hits != service_count);
+    }
+
+    if (service_count > 0 && !manual_unpublish) {
+	/* Create a situation where a subscription notification arrives
+	   during the detachment process. */
+	struct paf_props *new_props = paf_props_create();
+	paf_props_add_str(new_props, "name", "asdf");
+
+	CHKNOERR(paf_modify(context, service_ids[0], new_props));
+
+	paf_props_destroy(new_props);
+
+	paf_process(context);
     }
 
     for (i = 0; i < service_count && manual_unpublish; i++)
         paf_unpublish(context, service_ids[i]);
 
-    paf_process(context);
+    if (tu_randbool())
+	paf_process(context);
 
     paf_detach(context);
 
@@ -1501,27 +1522,33 @@ static int test_detach(bool with_server, bool manual_unpublish,
 #define DETACH_NUM_SERVICES (16)
 TESTCASE(paf, detach_attempts_unpublish_pending)
 {
-    return test_detach(true, true, DETACH_NUM_SERVICES);
+    return test_detach(WITH_SERVER|MANUAL_UNPUBLISH, DETACH_NUM_SERVICES);
 }
 
 TESTCASE(paf, detach_auto_unpublish_no_server)
 {
-    return test_detach(false, false, DETACH_NUM_SERVICES);
+    return test_detach(0, DETACH_NUM_SERVICES);
 }
 
 TESTCASE(paf, detach_auto_unpublish_server)
 {
-    return test_detach(true, false, DETACH_NUM_SERVICES);
+    return test_detach(WITH_SERVER, DETACH_NUM_SERVICES);
 }
 
 TESTCASE(paf, detach_no_services)
 {
-    return test_detach(true, true, 0);
+    return test_detach(WITH_SERVER|MANUAL_UNPUBLISH, 0);
 }
 
 TESTCASE(paf, detach_no_server)
 {
-    return test_detach(false, true, DETACH_NUM_SERVICES);
+    return test_detach(MANUAL_UNPUBLISH, DETACH_NUM_SERVICES);
+}
+
+TESTCASE(paf, detach_with_zero_ttl_services)
+{
+    setenv("PAF_TTL", "0", 1);
+    return test_detach(WITH_SERVER, DETACH_NUM_SERVICES);
 }
 
 TESTCASE(paf, detach_unresponsive_server)

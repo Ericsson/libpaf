@@ -12,7 +12,7 @@
     log_obj_debug(sd, fmt, ##__VA_ARGS__)
 
 #define log_sd_error(sd, fmt, ...)		\
-    log_ob_error(sd, fmt, ##__VA_ARGS__)
+    log_obj_error(sd, fmt, ##__VA_ARGS__)
 
 #define log_sd_timeout(sd, timeout)		\
     do {					\

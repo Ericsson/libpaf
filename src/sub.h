@@ -36,11 +36,11 @@ struct sub *sub_create(int64_t sub_id, const char *filter_str,
 		       const char *log_ref, paf_match_cb match_cb,
 		       void *user);
 
-void sub_report_match(struct sub *sub, int64_t source_id,
-		      enum paf_match_type match_type,
-		      int64_t service_id, const int64_t *generation,
-		      const struct paf_props *props, const int64_t *ttl,
-		      const double *orphan_since);
+int sub_report_match(struct sub *sub, int64_t source_id,
+		     enum paf_match_type match_type,
+		     int64_t service_id, const int64_t *generation,
+		     const struct paf_props *props, const int64_t *ttl,
+		     const double *orphan_since);
 
 void sub_orphan_all_from_source(struct sub *sub, int64_t source_id,
 				double since);

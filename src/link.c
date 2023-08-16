@@ -352,16 +352,15 @@ static void subscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
 	log_link_sub_match(link, sub_relay->obj_id);
 
 	if (sub_relay->state == relay_state_unsyncing ||
-	    sub_relay->pending_unsync) {
+	    sub_relay->pending_unsync || link->state == link_state_detaching) {
 	    log_link_sub_match_ignored(link);
 	    break;
 	}
 
-	/* XXX: consider the implications of server producing
-	   inconsistent subscription notifications */
-        sd_report_match(link->sd, link->link_id, sub_relay->obj_id,
-			*server_match_type, *service_id, generation,
-			props, ttl, orphan_since);
+        if (sd_report_match(link->sd, link->link_id, sub_relay->obj_id,
+			    *server_match_type, *service_id, generation,
+			    props, ttl, orphan_since) < 0)
+	    restart(link);
         break;
     }
     case proto_msg_type_complete:

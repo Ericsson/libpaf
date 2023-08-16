@@ -170,7 +170,7 @@
 		   "id 0x%"PRIx64".", sub_id)
 
 #define log_link_sub_match_ignored(link) \
-    log_link_debug(link, "Unsyncing in process; match ignored.")
+    log_link_debug(link, "Unsyncing or detach in process; match ignored.")
 
 #define log_link_sub_unsync(link, sub_id, ta_id)		\
     log_link_attempt(link, "subscription", "unsync", sub_id, ta_id)

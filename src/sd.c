@@ -162,16 +162,16 @@ struct sub *sd_get_sub(struct sd *sd, int64_t sub_id)
     return NULL;
 }
 
-void sd_report_match(struct sd *sd, int64_t source_id, int64_t sub_id,
-		     enum paf_match_type match_type, int64_t service_id,
-		     const int64_t *generation, const struct paf_props *props,
-		     const int64_t *ttl, const double *orphan_since)
+int sd_report_match(struct sd *sd, int64_t source_id, int64_t sub_id,
+		    enum paf_match_type match_type, int64_t service_id,
+		    const int64_t *generation, const struct paf_props *props,
+		    const int64_t *ttl, const double *orphan_since)
 {
     struct sub *sub = sd_get_sub(sd, sub_id);
     assert(sub != NULL);
 
-    sub_report_match(sub, source_id, match_type, service_id, generation,
-		     props, ttl, orphan_since);
+    return sub_report_match(sub, source_id, match_type, service_id, generation,
+			    props, ttl, orphan_since);
 }
 
 void sd_orphan_all_from_source(struct sd *sd, int64_t source_id, double now)
