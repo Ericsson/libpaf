@@ -110,7 +110,7 @@ static void untie_from_sd(struct link *link)
 			      ut_ftime(CLOCK_REALTIME));
 }
 
-static void restart(struct link *link);
+static void handle_error(struct link *link);
 
 static void try_flush_queue(struct link *link)
 {
@@ -125,7 +125,7 @@ static void try_flush_queue(struct link *link)
 
         if (rc < 0) {
             if (send_errno != EAGAIN) {
-                restart(link);
+                handle_error(link);
 		return;
 	    }
 	    break;
@@ -163,14 +163,14 @@ static void try_read_incoming(struct link *link)
 
         if (rc == 0) {
             log_link_server_conn_eof(link);
-            restart(link);
+            handle_error(link);
             break;
         } else if (rc < 0) {
             if (receive_errno == EAGAIN)
                 break;
             else {
                 log_link_server_conn_error(link, receive_errno);
-                restart(link);
+                handle_error(link);
                 break;
             }
         } else {
@@ -181,7 +181,7 @@ static void try_read_incoming(struct link *link)
 	    int rc = proto_ta_consume_response(&link->transactions, response,
                                                link->log_ref);
             if (rc < 0) {
-                restart(link);
+                handle_error(link);
                 break;
             }
         }
@@ -235,7 +235,7 @@ static void hello_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
     }
     case proto_msg_type_fail:
         log_link_ta_failure(link, ta_id, optargs[0]);
-        restart(link);
+        handle_error(link);
         break;
     default:
         assert(0);
@@ -270,7 +270,7 @@ static void publish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
     }
     case proto_msg_type_fail:
         log_link_ta_failure(link, ta_id, optargs[0]);
-        restart(link);
+        handle_error(link);
         break;
     default:
         assert(0);
@@ -297,7 +297,7 @@ static void unpublish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
     }
     case proto_msg_type_fail:
         log_link_ta_failure(link, ta_id, optargs[0]);
-        restart(link);
+        handle_error(link);
         break;
     default:
         assert(0);
@@ -360,7 +360,7 @@ static void subscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
         if (sd_report_match(link->sd, link->link_id, sub_relay->obj_id,
 			    *server_match_type, *service_id, generation,
 			    props, ttl, orphan_since) < 0)
-	    restart(link);
+	    handle_error(link);
         break;
     }
     case proto_msg_type_complete:
@@ -369,7 +369,7 @@ static void subscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
         break;
     case proto_msg_type_fail:
         log_link_ta_failure(link, ta_id, optargs[0]);
-        restart(link);
+        handle_error(link);
         break;
     default:
         assert(0);
@@ -393,7 +393,7 @@ static void unsubscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
         break;
     case proto_msg_type_fail:
         log_link_ta_failure(link, ta_id, optargs[0]);
-        restart(link);
+        handle_error(link);
         break;
     default:
         assert(0);
@@ -774,6 +774,14 @@ static void restart(struct link *link)
     set_state(link, link_state_connecting);
 
     assure_reconnect_tmo(link);
+}
+
+static void handle_error(struct link *link)
+{
+    if (link->state != link_state_detaching)
+	restart(link);
+    else
+	link->state = link_state_detached;
 }
 
 static bool is_tcp_based(const char *addr)
