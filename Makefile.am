@@ -53,7 +53,8 @@ PAFTEST_UNITTEST_SOURCES = src/sub.c src/filter.c src/log.c \
 	src/match.c src/service.c src/sd.c src/paf_props.c src/paf_value.c \
 	src/server_conf.c src/domain_conf.c src/conf.c
 paftest_SOURCES = $(PAFTEST_TESTCASE_SOURCES) $(UTEST_SOURCES) \
-	src/util.c test/testutil.c $(PAFTEST_UNITTEST_SOURCES)
+	src/util.c test/testutil.c test/testsetup.c \
+	$(PAFTEST_UNITTEST_SOURCES)
 paftest_CPPFLAGS=$(AM_CPPFLAGS) $(TEST_CPPFLAGS)
 paftest_LDADD = libpaf.la
 paftest_LDFLAGS = -no-install
