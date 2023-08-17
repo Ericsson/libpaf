@@ -24,7 +24,9 @@ Dependencies:
 
 To build and install libpaf, run:
 
+```
 autoreconf -i && ./configure && make install
+```
 
 ## Test Suites
 
@@ -41,7 +43,17 @@ Both types of tests use the 'utest' test framework, included in the
 source tree.
 
 To run the tests, issue:
+
+```
 make check
+```
+
+In case the *tpafd* (or any other) server is to be used by integration
+tests, use:
+
+```
+PAFD=tpafd make check
+```
 
 For the test suite to cover functionality related to network
 namespaces, the CAP_SYS_ADMIN capability is required.

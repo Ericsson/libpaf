@@ -22,6 +22,9 @@
 
 //#define PAFD_DEBUG
 
+#define DEFAULT_PAFD_BIN "pafd"
+#define PAFD_ENV "PAFD"
+
 static bool is_in_valgrind(void)
 {
     return getenv("IN_VALGRIND") ? true : false;
@@ -90,10 +93,17 @@ static pid_t run_server(const char *net_ns, const char *addr)
 	if (net_ns != NULL && ut_net_ns_enter(net_ns) < 0)
 	    exit(EXIT_FAILURE);
 
+	const char *pafd = DEFAULT_PAFD_BIN;
+
+	const char *pafd_env = getenv(PAFD_ENV);
+
+	if (pafd_env != NULL)
+	    pafd = pafd_env;
+
 #ifdef PAFD_DEBUG
-        execlp("pafd", "pafd", "-l", "debug", addr, NULL);
+        execlp(pafd, pafd, "-l", "debug", addr, NULL);
 #else
-        execlp("pafd", "pafd", addr, NULL);
+        execlp(pafd, pafd, addr, NULL);
 #endif
         exit(EXIT_FAILURE);
     } else

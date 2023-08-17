@@ -22,7 +22,7 @@ import paf.client
 
 from logging.handlers import MemoryHandler
 
-DEBUG = False
+DEFAULT_PAFD_BIN = 'pafd'
 
 DOMAINS_DIR = 'pytest-domains.d'
 
@@ -35,6 +35,14 @@ def random_name():
         name += random.choice(string.ascii_lowercase)
         len -= 1
     return name
+
+def pafd_bin():
+    pafd = os.environ.get("PAFD")
+
+    if pafd is None:
+        pafd = DEFAULT_PAFD_BIN
+
+    return pafd
 
 class Domain:
     def __init__(self):
@@ -51,7 +59,7 @@ class Domain:
     def start_server(self):
         if self.server_process != None:
             return
-        cmd = [ "pafd" ]
+        cmd = [ pafd_bin() ]
         if DEBUG:
             cmd.extend(["-l", "debug", "-s"])
         cmd.append(self.addr)
