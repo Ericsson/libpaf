@@ -4,7 +4,7 @@ Pathfinder is a light-weight service discovery system.
 
 The Pathfinder Client Library `libpaf` is a C library used to access
 one or more Pathfinder service discovery domains, either as a service
-producer or consumer. The library is an implementation of the
+provider or consumer. The library is an implementation of the
 [Pathfinder
 protocol](https://github.com/Ericsson/paf/blob/master/doc/PROTOCOL.md)
 version 2.
@@ -30,12 +30,13 @@ autoreconf -i && ./configure && make install
 
 ## Test Suites
 
-The source tree includes both unit and component-level tests. The
-component-level test are an integration test, running against a real
-Pathfinder server. Either the Pathfinder server (pafd) is installed on
-the system ("make install"), or the 'paf' module needs to be included
-in the PYTHONPATH, and the PATH needs to include the 'pafd'
-executable.
+The libpaf source tree hosts unit and component-level tests for the
+library. The component-level test suite is an integration test,
+running against a real Pathfinder server.
+
+The component-level tests will look for a `pafd` binary in the
+PATH. In addition, the 'paf' Python module needs to be included in the
+PYTHONPATH.
 
 If available, valgrind will be used when running the test suites.
 
@@ -48,7 +49,7 @@ To run the tests, issue:
 make check
 ```
 
-In case the *tpafd* (or any other) server is to be used by integration
+In case the `tpafd` (or any other) server is to be used by integration
 tests, use:
 
 ```
