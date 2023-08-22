@@ -205,6 +205,35 @@ bool ut_str_ary_has(char * const *ary, size_t ary_len, const char *needle)
     return false;
 }
 
+UT_STATIC_ASSERT(long_long_is_int64, sizeof(long long) == sizeof(int64_t));
+
+int ut_parse_int64(const char *int64_s, int base, int64_t *int64)
+{
+    char *end;
+    int64_t value = strtoll(int64_s, &end, base);
+
+    if (end[0] == '\0') {
+	*int64 = value;
+	return 0;
+    } else
+	return -1;
+}
+
+int ut_parse_uint63(const char *uint63_s, int base, int64_t *uint63)
+{
+    int64_t result;
+
+    if (ut_parse_int64(uint63_s, base, &result) < 0)
+	return -1;
+
+    if (result < 0)
+	return -1;
+
+    *uint63 = result;
+
+    return 0;
+}
+
 #define NETNS_NAME_DIR "/run/netns"
 
 static int get_ns_fd(const char *ns) {

@@ -126,7 +126,9 @@ static const struct proto_ta_type subscribe_ta =
     .cmd = PROTO_CMD_SUBSCRIBE,
     .ia_type = proto_ia_type_multi_response,
     .request_fields = {
-        { PROTO_FIELD_SUBSCRIPTION_ID, proto_field_type_int64 },
+        { PROTO_FIELD_SUBSCRIPTION_ID, proto_field_type_int64 }
+    },
+    .opt_request_fields = {
         { PROTO_FIELD_FILTER, proto_field_type_str }
     },
     .notify_fields = {
@@ -150,6 +152,67 @@ static const struct proto_ta_type unsubscribe_ta =
     .ia_type = proto_ia_type_single_response,
     .request_fields = {
         { PROTO_FIELD_SUBSCRIPTION_ID, proto_field_type_int64 }
+    },
+    .opt_fail_fields = {
+        { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
+    }
+};
+
+static const struct proto_ta_type subscriptions_ta =
+{
+    .cmd = PROTO_CMD_SUBSCRIPTIONS,
+    .ia_type = proto_ia_type_multi_response,
+    .notify_fields = {
+        { PROTO_FIELD_SUBSCRIPTION_ID, proto_field_type_int64 },
+        { PROTO_FIELD_CLIENT_ID, proto_field_type_int64 }
+    },
+    .opt_notify_fields = {
+        { PROTO_FIELD_FILTER, proto_field_type_str }
+    },
+    .opt_fail_fields = {
+        { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
+    }
+};
+
+static const struct proto_ta_type services_ta =
+{
+    .cmd = PROTO_CMD_SERVICES,
+    .ia_type = proto_ia_type_multi_response,
+    .opt_request_fields = {
+        { PROTO_FIELD_FILTER, proto_field_type_str }
+    },
+    .notify_fields = {
+        { PROTO_FIELD_SERVICE_ID, proto_field_type_int64 },
+        { PROTO_FIELD_GENERATION, proto_field_type_int64 },
+        { PROTO_FIELD_SERVICE_PROPS, proto_field_type_props },
+        { PROTO_FIELD_TTL, proto_field_type_int64 },
+        { PROTO_FIELD_CLIENT_ID, proto_field_type_int64 }
+    },
+    .opt_notify_fields = {
+        { PROTO_FIELD_ORPHAN_SINCE, proto_field_type_number }
+    },
+    .opt_fail_fields = {
+        { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
+    }
+};
+
+static const struct proto_ta_type ping_ta =
+{
+    .cmd = PROTO_CMD_PING,
+    .ia_type = proto_ia_type_single_response,
+    .opt_fail_fields = {
+        { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
+    }
+};
+
+static const struct proto_ta_type clients_ta =
+{
+    .cmd = PROTO_CMD_CLIENTS,
+    .ia_type = proto_ia_type_multi_response,
+    .notify_fields = {
+        { PROTO_FIELD_CLIENT_ID, proto_field_type_int64 },
+        { PROTO_FIELD_CLIENT_ADDR, proto_field_type_str },
+        { PROTO_FIELD_TIME, proto_field_type_int64 },
     },
     .opt_fail_fields = {
         { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
@@ -187,6 +250,10 @@ GEN_PROTO_CREATE(publish)
 GEN_PROTO_CREATE(unpublish)
 GEN_PROTO_CREATE(subscribe)
 GEN_PROTO_CREATE(unsubscribe)
+GEN_PROTO_CREATE(subscriptions)
+GEN_PROTO_CREATE(services)
+GEN_PROTO_CREATE(ping)
+GEN_PROTO_CREATE(clients)
 
 static void prop_to_json(const char *prop_name,
                          const struct paf_value *prop_value, void *user)
@@ -220,6 +287,36 @@ static json_t *props_to_json(const struct paf_props *props)
     return json_props;
 }
 
+static void set_field(json_t *request, const struct proto_field *field,
+		      va_list ap)
+{
+    switch (field->type) {
+    case proto_field_type_int64: {
+	json_object_set_new(request, field->name,
+			    json_integer(va_arg(ap, int64_t)));
+	break;
+    }
+    case proto_field_type_number: {
+	json_object_set_new(request, field->name,
+			    json_real(va_arg(ap, double)));
+	break;
+    }
+    case proto_field_type_str:
+	json_object_set_new(request, field->name,
+			    json_string(va_arg(ap, const char *)));
+	break;
+    case proto_field_type_props: {
+	const struct paf_props *props = va_arg(ap, const struct paf_props *);
+	json_t *json_props = props_to_json(props);
+	json_object_set_new(request, field->name, json_props);
+	break;
+    }
+    default:
+	assert(0);
+	break;
+    }
+}
+
 struct msg *proto_ta_produce_request(struct proto_ta *ta, ...)
 {
     assert (ta->state == proto_ta_state_idle);
@@ -227,38 +324,17 @@ struct msg *proto_ta_produce_request(struct proto_ta *ta, ...)
     json_t *request = create_request(ta->type->cmd, ta->ta_id);
 
     const struct proto_field *fields = ta->type->request_fields;
+    const struct proto_field *opt_fields = ta->type->opt_request_fields;
 
     va_list ap;
     va_start(ap, ta);
 
     int i;
-    for (i = 0; fields[i].name != NULL; i++) {
-        switch (fields[i].type) {
-        case proto_field_type_int64:
-            json_object_set_new(request, fields[i].name,
-                                json_integer(va_arg(ap, int64_t)));
-            break;
-        case proto_field_type_number:
-            json_object_set_new(request, fields[i].name,
-                                json_real(va_arg(ap, double)));
-            break;
-        case proto_field_type_str:
-            json_object_set_new(request, fields[i].name,
-                                json_string(va_arg(ap, const char *)));
-            break;
-        case proto_field_type_props: {
-            const struct paf_props *props =
-                va_arg(ap, const struct paf_props *);
+    for (i = 0; fields != NULL && fields[i].name != NULL; i++)
+	set_field(request, &fields[i], ap);
 
-            json_t *json_props = props_to_json(props);
-            json_object_set_new(request, fields[i].name, json_props);
-            break;
-        }
-        case proto_field_type_match_type:
-            assert(0);
-            break;
-        }
-    }
+    for (i = 0; opt_fields != NULL && opt_fields[i].name != NULL; i++)
+	set_field(request, &opt_fields[i], ap);
 
     va_end(ap);
 
@@ -539,10 +615,9 @@ static int ta_consume_response(struct proto_ta *ta,
     if (num_opt_args < 0)
 	ta->state = proto_ta_state_failed;
 
-    int rc = 0;
     bool terminated = false;
+
     if (ta->state == proto_ta_state_failed) {
-	rc = -1;
 	msg_type = proto_msg_type_fail;
 	terminated = true;
     } else if (ta->state == proto_ta_state_completed)
@@ -552,7 +627,9 @@ static int ta_consume_response(struct proto_ta *ta,
        transaction list (i.e. restart the link) */
     if (terminated)
 	LIST_REMOVE(ta, entry);
+
     ta->cb(ta->ta_id, msg_type, args, opt_args, ta->user);
+
     if (terminated)
 	proto_ta_destroy(ta);
 
@@ -560,7 +637,7 @@ static int ta_consume_response(struct proto_ta *ta,
     free_fields(fields, args, num_args);
     json_decref(response);
 
-    return rc;
+    return 0;
 }
 
 int proto_ta_consume_response(struct proto_ta_list *ta_list,

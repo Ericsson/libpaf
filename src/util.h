@@ -47,6 +47,9 @@ ssize_t ut_read_file(int fd, void* buf, size_t capacity);
 bool ut_str_begins_with(const char *s, char c);
 bool ut_str_ary_has(char * const *ary, size_t ary_len, const char *needle);
 
+int ut_parse_int64(const char *int64_s, int base, int64_t *int64);
+int ut_parse_uint63(const char *uint63_s, int base, int64_t *uint63);
+
 int ut_net_ns_enter(const char *ns_name);
 int ut_net_ns_return(int old_ns_fd);
 
@@ -79,5 +82,7 @@ int ut_net_ns_return(int old_ns_fd);
     }
 
 #define UT_ARRAY_LEN(ary) (sizeof(ary) / sizeof(ary[0]))
+
+#define UT_UNUSED __attribute__((unused))
 
 #endif
