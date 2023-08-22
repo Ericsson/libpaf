@@ -45,6 +45,11 @@ AC_CHECK_HEADERS(jansson.h, [],
 AC_CHECK_LIB(jansson, json_loads, [],
              [AC_MSG_ERROR([Unable to find the Jansson library.])])
 
+AC_CHECK_HEADERS(readline/readline.h, [],
+                 [AC_MSG_ERROR([Unable to find GNU readline header files.])])
+AC_CHECK_LIB(readline, readline, [],
+             [AC_MSG_ERROR([Unable to find the GNU readline library.])])
+
 AC_ARG_ENABLE([lttng],
     AS_HELP_STRING([--disable-lttng], [disable LTTng logging support]))
 
