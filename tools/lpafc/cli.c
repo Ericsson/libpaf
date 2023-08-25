@@ -177,7 +177,7 @@ static void handle_line(char *line)
 {
     if (line == NULL) {
 	cli_exit(0);
-	goto out;
+	return;
     }
 
     if (strlen(line) == 0)
@@ -196,7 +196,6 @@ static void handle_line(char *line)
 
 out_free:
     free(line);
-out:
 }
 
 void cli_init(const char *prompt)
