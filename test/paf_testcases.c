@@ -1133,6 +1133,49 @@ TESTCASE(paf, change_domain_tls_conf)
     return UTEST_SUCCESS;
 }
 
+static int run_certificate_revocation(bool after_rescan)
+{
+    char *tls_addr = ts_random_tls_addr();
+
+    struct server server = {
+	.addr = tls_addr,
+	.pid = -1
+    };
+
+    CHKNOERR(ts_server_start(&server));
+
+    struct paf_context *context;
+
+    if (after_rescan) {
+	CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
+					   TS_CLIENT_KEY, TS_CLIENT_TC,
+					   TS_EMPTY_CRL, &server, 1));
+
+	context = paf_attach(ts_domain_name);
+
+	CHKNOERR(wait_for_client_count(context, 2, &server, 1));
+    }
+
+    CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
+				       TS_CLIENT_KEY, TS_CLIENT_TC,
+				       TS_REVOKED_SERVER_CERT_CRL, &server, 1));
+
+    if (after_rescan)
+	CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
+    else {
+	context = paf_attach(ts_domain_name);
+	CHKNOERR(wait_for(context, MAX_RECONNECT_PERIOD));
+    }
+
+    CHKNOERR(ts_assure_client_count(&server, 0));
+
+    paf_close(context);
+
+    ut_free(tls_addr);
+
+    return UTEST_SUCCESS;
+}
+
 TESTCASE(paf, certificate_revocation)
 {
     bool supports_crl_attr =
@@ -1141,34 +1184,11 @@ TESTCASE(paf, certificate_revocation)
     if (!supports_crl_attr)
 	return UTEST_NOT_RUN;
 
-    char *tls_addr = ts_random_tls_addr();
+    if (run_certificate_revocation(true) != UTEST_SUCCESS)
+	return UTEST_FAILED;
 
-    struct server server = {
-	.addr = tls_addr,
-	.pid = -1
-    };
-
-    CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
-				       TS_CLIENT_KEY, TS_CLIENT_TC,
-				       TS_EMPTY_CRL, &server, 1));
-
-    CHKNOERR(ts_server_start(&server));
-
-    struct paf_context *context = paf_attach(ts_domain_name);
-
-    CHKNOERR(wait_for_client_count(context, 2, &server, 1));
-
-    CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
-				       TS_CLIENT_KEY, TS_CLIENT_TC,
-				       TS_REVOKED_SERVER_CERT_CRL, &server, 1));
-
-    CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
-
-    CHKNOERR(ts_assure_client_count(&server, 0));
-
-    paf_close(context);
-
-    ut_free(tls_addr);
+    if (run_certificate_revocation(false) != UTEST_SUCCESS)
+	return UTEST_FAILED;
 
     return UTEST_SUCCESS;
 }
