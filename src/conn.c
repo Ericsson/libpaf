@@ -282,7 +282,8 @@ static void std_sr_response(int64_t ta_id, enum proto_msg_type msg_type,
 
 	conn_fail_cb cb = (conn_fail_cb)call->fail_cb;
 
-	int err = fail_reason_to_err(fail_reason);
+	int err = fail_reason != NULL ? fail_reason_to_err(fail_reason) :
+	    CONN_ERR_UNKNOWN;
 
 	cb(call->proto_ta->ta_id, err, call->cb_data);
 
