@@ -8,6 +8,8 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <xcm.h>
 #include <xcm_addr.h>
@@ -1193,8 +1195,8 @@ TESTCASE(paf, certificate_revocation)
     return UTEST_SUCCESS;
 }
 
-pid_t fake_server(double duration, double reconnect_min,
-		  double reconnect_max, const char *addr)
+pid_t reconnect_test_server(double reconnect_min, double reconnect_max,
+			    const char *addr)
 {
     pid_t p = fork();
 
@@ -1208,55 +1210,59 @@ pid_t fake_server(double duration, double reconnect_min,
     if (server_socket == NULL)
 	exit(EXIT_FAILURE);
 
+    struct xcm_socket *first_conn = xcm_accept(server_socket);
 
-    double deadline = ut_ftime(CLOCK_REALTIME) + duration;
-    int i;
-    for (i = 0; ut_ftime(CLOCK_REALTIME) < deadline; i++) {
-	double period_start = ut_ftime(CLOCK_REALTIME);
-	struct xcm_socket *client = xcm_accept(server_socket);
-	xcm_close(client);
+    double start = ut_ftime(CLOCK_MONOTONIC);
 
-	if (i == 0)
-	    continue;
+    xcm_close(first_conn);
 
-	double period = ut_ftime(CLOCK_REALTIME) - period_start;
+    struct xcm_socket *second_conn = xcm_accept(server_socket);
 
-	if (period < reconnect_min)
-	    exit(EXIT_FAILURE);
-	if (period > (reconnect_max + 0.25))
-	    exit(EXIT_FAILURE);
-    }
+    double reconnect_time = ut_ftime(CLOCK_MONOTONIC) - start;
+
+    xcm_close(second_conn);
+
+    if (reconnect_time < reconnect_min)
+	exit(EXIT_FAILURE);
+    if (reconnect_time > (reconnect_max + 0.25))
+	exit(EXIT_FAILURE);
+
     exit(EXIT_SUCCESS);
 }
 
-TESTCASE(paf, reconnect)
+TESTCASE_F(paf, reconnect, REQUIRE_NO_LOCAL_PORT_BIND)
 {
     REQUIRE_NOT_IN_VALGRIND;
 
     double reconnect_min = 0.1;
     double reconnect_max = 1.0;
-    double duration = reconnect_max * 2;
 
     if (setenv_double("PAF_RECONNECT_MAX", reconnect_max) < 0)
 	return UTEST_FAILED;
     if (setenv_double("PAF_RECONNECT_MIN", reconnect_min) < 0)
 	return UTEST_FAILED;
 
-    pid_t pid = fake_server(duration, reconnect_min, reconnect_max,
-			    ts_servers[0].addr);
+    pid_t pid = reconnect_test_server(reconnect_min, reconnect_max,
+				      ts_servers[0].addr);
 
     tu_msleep(100);
-    
+
     struct paf_context *context = paf_attach(ts_domain_name);
 
-    double deadline =
-	ut_ftime(CLOCK_REALTIME) + duration + reconnect_max + 0.25;
-    while (ut_ftime(CLOCK_REALTIME) < deadline)
+    int status;
+    pid_t wpid;
+
+    do {
 	CHKNOERR(wait_for(context, 0.1));
 
-    CHKNOERR(tu_waitstatus(pid));
+	wpid = waitpid(pid, &status, WNOHANG);
+    } while (wpid == 0);
 
     paf_close(context);
+
+    CHKINTEQ(wpid, pid);
+
+    CHK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 
     return UTEST_SUCCESS;
 }
