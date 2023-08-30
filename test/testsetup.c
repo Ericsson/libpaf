@@ -166,7 +166,11 @@ uint16_t ts_random_tcp_port(void)
 
 static char *localhost_port_addr(const char *proto, uint16_t port)
 {
-    return ut_asprintf("%s:127.0.0.1:%d", proto, port);
+    int b = tu_randint(1, 254);
+    int c = tu_randint(1, 254);
+    int d = tu_randint(1, 254);
+
+    return ut_asprintf("%s:127.%d.%d.%d:%d", proto, b, c, d, port);
 }
 
 static char *gen_localhost_port_addr(const char *proto)
