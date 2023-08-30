@@ -384,7 +384,6 @@ def run_test(repo, conf, release_commit):
 
     cmd += """
 make check; \\
-sudo make check \\
 """
 
     run(cmd)
