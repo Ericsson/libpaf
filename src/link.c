@@ -151,12 +151,18 @@ static void clear_tas(struct link *link)
     }
 }
 
+static bool is_io_capable_state(enum link_state state)
+{
+    return state == link_state_greeting || state == link_state_operational ||
+	state == link_state_detaching;
+}
+
 #define MSG_MAX (65535)
 
 static void try_read_incoming(struct link *link)
 {
     char* buf = ut_malloc(MSG_MAX);
-    for (;;) {
+    do {
         UT_SAVE_ERRNO;
         int rc = xcm_receive(link->conn, buf, MSG_MAX);
         UT_RESTORE_ERRNO(receive_errno);
@@ -185,7 +191,8 @@ static void try_read_incoming(struct link *link)
                 break;
             }
         }
-    }
+    } while (is_io_capable_state(link->state));
+
     ut_free(buf);
 }
 
@@ -916,9 +923,7 @@ int link_process(struct link *link)
     if (link->state == link_state_connecting)
         try_connect(link);
 
-    if (link->state == link_state_greeting ||
-	link->state == link_state_operational ||
-        link->state == link_state_detaching) {
+    if (is_io_capable_state(link->state)) {
 	size_t ta_count =
 	    LIST_COUNT(&link->transactions, entry);
 	size_t service_relay_count =
@@ -932,9 +937,7 @@ int link_process(struct link *link)
         try_flush_queue(link);
     }
 
-    if (link->state == link_state_greeting ||
-        link->state == link_state_operational ||
-        link->state == link_state_detaching)
+    if (is_io_capable_state(link->state))
         try_read_incoming(link);
 
     if (link->state == link_state_detaching)

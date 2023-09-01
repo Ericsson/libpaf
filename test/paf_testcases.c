@@ -1413,6 +1413,51 @@ TESTCASE(paf, multi_homed_server)
     return UTEST_SUCCESS;
 }
 
+TESTCASE(paf, no_compatible_version)
+{
+    struct paf_context *context = paf_attach(ts_domain_name);
+
+    CHK(context != NULL);
+
+    struct xcm_socket *server_socket = xcm_server(ts_servers[0].addr);
+    CHK(server_socket != NULL);
+
+    CHKNOERR(xcm_set_blocking(server_socket, false));
+
+    struct xcm_socket *conn = NULL;
+    bool responded = false;
+    double deadline = ut_ftime(CLOCK_REALTIME) + 1;
+
+    while (ut_ftime(CLOCK_REALTIME) < deadline) {
+	if (conn == NULL)
+	    conn = xcm_accept(server_socket);
+	else {
+	    char buf[65535];
+
+	    xcm_receive(conn, buf, sizeof(buf));
+
+	    if (!responded) {
+		const char *msg = "{\"ta-cmd\": \"hello\", \"ta-id\": 0, "
+		    "\"msg-type\": \"fail\", \"fail-reason\": "
+		    "\"unsupported-protocol-version\"}";
+
+		if (xcm_send(conn, msg, strlen(msg)) == 0)
+		    responded = true;
+	    }
+	}
+
+	CHKNOERR(paf_process(context));
+
+	tu_msleep(10);
+    }
+
+    paf_close(context);
+    xcm_close(conn);
+    xcm_close(server_socket);
+
+    return UTEST_SUCCESS;
+}
+
 TESTCASE(paf, escape)
 {
     char *s = paf_filter_escape("foo");
