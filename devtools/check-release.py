@@ -306,11 +306,15 @@ def check_changes(repo, release_commit):
 
 
 def run(cmd, exit_on_error=True):
-    res = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE,
+    stdout = tempfile.TemporaryFile(buffering=0)
+    res = subprocess.run(cmd, shell=True, stdout=stdout,
                          stderr=subprocess.STDOUT, encoding='utf-8')
 
     if res.returncode != 0:
-        sys.stderr.write(res.stdout)
+        stdout.seek(0)
+        output += stdout.read().decode('utf-8')
+        sys.stderr.write(output)
+
         if exit_on_error:
             sys.exit(1)
         else:
@@ -322,22 +326,23 @@ def test_build_separate_build_dir(repo, release_commit):
     release_tag = get_commit_release_tag(repo, release_commit)
 
     print("Test build w/ separate build directory.")
-    cmd = """
-set -e
-tmpdir=`mktemp -d`; \\
-libpafdir=libpaf-%s; \\
-tarfile=$tmpdir/$libpafdir.tar; \\
-git archive --prefix=$libpafdir/ --format=tar -o $tarfile %s; \\
-cd $tmpdir; \\
-tar xf $tarfile; \\
-cd $libpafdir; \\
-autoreconf -i; \\
-mkdir build; \\
-cd build; \\
-../configure; \\
-make -j; \\
-""" % (tag_version(release_tag), release_commit)
+    release_version = tag_version(release_tag)
 
+    cmd = (
+        f"set -e; "
+        f"tmpdir=`mktemp -d`; "
+        f"libpafdir=libpaf-{release_version}; "
+        f"tarfile=$tmpdir/$libpafdir.tar; "
+        f"git archive --prefix=$libpafdir/ --format=tar -o $tarfile {release_commit}; "
+        f"cd $tmpdir; "
+        f"tar xf $tarfile; "
+        f"cd $libpafdir; "
+        f"autoreconf -i; "
+        f"mkdir build; "
+        f"cd build; "
+        f"../configure; "
+        f"make -j"
+    )
     run(cmd)
 
 
@@ -353,19 +358,20 @@ def build_cmd(conf, cflags, release_commit, release_tag, build_dir):
 
     conf += (" CFLAGS=\"%s\"" % cflags)
 
-    return """
-set -e
-tmpdir=%s; \\
-libpafdir=libpaf-%s; \\
-tarfile=$tmpdir/$libpafdir.tar; \\
-git archive --prefix=$libpafdir/ --format=tar -o $tarfile %s;\\
-cd $tmpdir; \\
-tar xf $tarfile; \\
-cd $libpafdir; \\
-autoreconf -i; \\
-./configure %s; \\
-make -j; \\
-""" % (build_dir, tag_version(release_tag), release_commit, conf)
+    release_version = tag_version(release_tag)
+    return (
+        f"set -e; "
+        f"tmpdir={build_dir}; "
+        f"libpafdir=libpaf-{release_version}; "
+        f"tarfile=$tmpdir/$libpafdir.tar; "
+        f"git archive --prefix=$libpafdir/ --format=tar -o $tarfile {release_commit}; "
+        f"cd $tmpdir; "
+        f"tar xf $tarfile; "
+        f"cd $libpafdir; "
+        f"autoreconf -i; "
+        f"./configure {conf}; "
+        f"make -j"
+    )
 
 
 def run_test(repo, conf, release_commit):
@@ -382,9 +388,7 @@ def run_test(repo, conf, release_commit):
     cmd = build_cmd(conf, EXTRA_BUILD_CFLAGS, release_commit, release_tag,
                     temp_dir.name)
 
-    cmd += """
-make check; \\
-"""
+    cmd += "; make check"
 
     run(cmd)
 
