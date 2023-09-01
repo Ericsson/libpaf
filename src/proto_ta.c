@@ -287,35 +287,35 @@ static json_t *props_to_json(const struct paf_props *props)
     return json_props;
 }
 
-static void set_field(json_t *request, const struct proto_field *field,
-		      va_list ap)
-{
-    switch (field->type) {
-    case proto_field_type_int64: {
-	json_object_set_new(request, field->name,
-			    json_integer(va_arg(ap, int64_t)));
-	break;
-    }
-    case proto_field_type_number: {
-	json_object_set_new(request, field->name,
-			    json_real(va_arg(ap, double)));
-	break;
-    }
-    case proto_field_type_str:
-	json_object_set_new(request, field->name,
-			    json_string(va_arg(ap, const char *)));
-	break;
-    case proto_field_type_props: {
-	const struct paf_props *props = va_arg(ap, const struct paf_props *);
-	json_t *json_props = props_to_json(props);
-	json_object_set_new(request, field->name, json_props);
-	break;
-    }
-    default:
-	assert(0);
-	break;
-    }
-}
+#define SET_FIELD(request, field, ap)					\
+    do {								\
+	switch ((field)->type) {					\
+	case proto_field_type_int64: {					\
+	    json_object_set_new(request, (field)->name,			\
+				json_integer(va_arg(ap, int64_t)));	\
+	    break;							\
+	}								\
+	case proto_field_type_number: {					\
+	    json_object_set_new(request, (field)->name,			\
+				json_real(va_arg(ap, double)));		\
+	    break;							\
+	}								\
+	case proto_field_type_str:					\
+	    json_object_set_new(request, (field)->name,			\
+				json_string(va_arg(ap, const char *))); \
+	    break;							\
+	case proto_field_type_props: {					\
+	    const struct paf_props *props =				\
+		va_arg(ap, const struct paf_props *);			\
+	    json_t *json_props = props_to_json(props);			\
+	    json_object_set_new(request, (field)->name, json_props);	\
+	    break;							\
+	}								\
+	default:							\
+	    assert(0);							\
+	    break;							\
+	}								\
+    } while (0)
 
 struct msg *proto_ta_produce_request(struct proto_ta *ta, ...)
 {
@@ -331,10 +331,10 @@ struct msg *proto_ta_produce_request(struct proto_ta *ta, ...)
 
     int i;
     for (i = 0; fields != NULL && fields[i].name != NULL; i++)
-	set_field(request, &fields[i], ap);
+	SET_FIELD(request, &fields[i], ap);
 
     for (i = 0; opt_fields != NULL && opt_fields[i].name != NULL; i++)
-	set_field(request, &opt_fields[i], ap);
+	SET_FIELD(request, &opt_fields[i], ap);
 
     va_end(ap);
 
