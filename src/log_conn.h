@@ -44,6 +44,24 @@
 #define log_conn_eof(conn)				\
     log_conn_debug(conn, "Server closed XCM connection.")
 
+#define log_conn_net_ns_entered(conn, ns_name)				\
+    log_conn_debug(conn, "Entered network namespace \"%s\".", ns_name)
+
+#define log_conn_net_ns_returned(conn, ns_name)				\
+    log_conn_debug(conn, "Returned from network namespace \"%s\".", ns_name)
+
+#define log_conn_net_ns_op_failed(conn, op_name, ns_name, net_ns_errno) \
+    log_conn_debug(conn, "Failed to %s network namespace \"%s\"; "	\
+		   "errno %d (%s).", op_name, ns_name, net_ns_errno,	\
+		   strerror(net_ns_errno))
+
+#define log_conn_net_ns_enter_failed(conn, ns_name, net_ns_errno)	\
+    log_conn_net_ns_op_failed(conn, "enter", ns_name, net_ns_errno)
+
+#define log_conn_net_ns_return_failed(conn, ns_name, net_ns_errno)	\
+    log_conn_net_ns_op_failed(conn, "return from", ns_name,		\
+			      net_ns_errno)
+
 #define log_conn_op_error(conn, op_name, xcm_errno)		      \
     log_conn_debug(conn, "Fatal error while %s on XCM connection; "   \
 		   "errno %d (%s).", op_name, xcm_errno,	      \

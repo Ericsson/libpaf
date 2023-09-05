@@ -154,6 +154,8 @@ struct conn *conn_connect(const struct server_conf *server_conf,
     if (client_id == CONN_CLIENT_ID_ANY)
 	client_id = ut_rand_id();
 
+    assert(client_id >= 0);
+
     *conn = (struct conn) {
 	.client_id = client_id,
 	.log_ref = ut_asprintf("client: %"PRIx64, client_id)
@@ -165,17 +167,48 @@ struct conn *conn_connect(const struct server_conf *server_conf,
 
     log_conn_connect(conn, server_conf->addr);
 
+    int old_ns_fd = -1;
+
+    if (server_conf->net_ns != NULL) {
+	old_ns_fd = ut_net_ns_enter(server_conf->net_ns);
+
+	if (old_ns_fd < 0) {
+	    log_conn_net_ns_enter_failed(conn, server_conf->net_ns, errno);
+	    goto err_close;
+	}
+
+	log_conn_net_ns_entered(conn, server_conf->net_ns);
+    }
+
     conn->sock = connect_xcm(server_conf);
 
     if (conn->sock == NULL) {
 	log_conn_connect_failed(conn, errno);
-	conn_close(conn);
-	return NULL;
+	goto err_switch_back;
     }
 
     await(conn->sock, XCM_SO_RECEIVABLE);
 
+    if (old_ns_fd != -1) {
+	int rc = ut_net_ns_return(old_ns_fd);
+
+	if (rc < 0) {
+	    log_conn_net_ns_return_failed(conn, server_conf->net_ns, errno);
+	    goto err_close;
+	}
+
+	log_conn_net_ns_returned(conn, server_conf->net_ns);
+    }
+
     return conn;
+
+err_switch_back:
+    if (old_ns_fd >= 0)
+	ut_net_ns_return(old_ns_fd);
+err_close:
+    conn_close(conn);
+
+    return NULL;
 }
 
 void conn_close(struct conn *conn)
