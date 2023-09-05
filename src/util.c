@@ -75,6 +75,11 @@ char *ut_strdup(const char *str)
     return copy;
 }
 
+char *ut_strdup_non_null(const char *str)
+{
+    return str != NULL ? ut_strdup(str) : NULL;
+}
+
 char *ut_asprintf(const char *fmt, ...)
 {
     va_list ap;

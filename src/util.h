@@ -22,6 +22,7 @@ void ut_free(void *ptr);
 
 void *ut_dup(const void *buf, size_t len);
 char *ut_strdup(const char *str);
+char *ut_strdup_non_null(const char *str);
 
 char *ut_asprintf(const char *fmt, ...)
     __attribute__ ((format (printf, 1, 2)));

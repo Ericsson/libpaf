@@ -155,15 +155,11 @@ struct conn *conn_connect(const struct server_conf *server_conf,
 	client_id = ut_rand_id();
 
     *conn = (struct conn) {
-	.client_id = client_id
+	.client_id = client_id,
+	.log_ref = ut_strdup_non_null(log_ref)
     };
 
     assert(conn->client_id >= 0);
-
-    if (log_ref != NULL)
-	conn->log_ref = ut_asprintf("%s client: %"PRIx64, log_ref, client_id);
-    else
-	conn->log_ref = ut_asprintf("client: %"PRIx64, client_id);
 
     LIST_INIT(&conn->calls);
     LIST_INIT(&conn->transactions);
