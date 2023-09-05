@@ -27,8 +27,6 @@ static double ftime(void)
     return t.tv_sec+((double)t.tv_nsec)/1e9;
 }
 
-#define MAX_FDS (8)
-
 /* normally you would hook into a proper eventloop (like libevent), but
    to avoid such a depenceny, we are using "raw" poll() here */
 static int wait_for(struct paf_context *context, double duration)
