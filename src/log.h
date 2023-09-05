@@ -35,7 +35,7 @@ const void *log_fd_event_str(int event);
 	const char *_log_ref = log_ref;					\
         if (log_is_enabled(log_type))					\
             __log_event(log_type, __FILE__, __LINE__, __func__,		\
-			(_log_ref) != NULL ? (_log_ref) : "",		\
+			_log_ref != NULL ? _log_ref : "",		\
                         fmt, ##__VA_ARGS__);                            \
     } while (0)
 

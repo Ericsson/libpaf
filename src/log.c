@@ -54,10 +54,11 @@ static void log_console(const char *file, int line, const char *function,
     if (console_log) {
 	UT_SAVE_ERRNO;
 	char buf[BUFSZ];
-        snprintf(buf, sizeof(buf), "<%s> ", prefix);
         format_line(buf, sizeof(buf), file, line, function);
         ut_vaprintf(buf, sizeof(buf), format, ap);
-        fprintf(stderr, "%s\n", buf);
+	if (strlen(prefix) > 0)
+	    fprintf(stderr, "<%s> ", prefix);
+	fprintf(stderr, "%s\n", buf);
 	fflush(stderr);
 	UT_RESTORE_ERRNO_DC;
     }
