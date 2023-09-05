@@ -17,7 +17,7 @@
 struct conn;
 
 struct conn *conn_connect(const struct server_conf *server_conf,
-			  int64_t client_id);
+			  int64_t client_id, const char *log_ref);
 
 void conn_close(struct conn *conn);
 

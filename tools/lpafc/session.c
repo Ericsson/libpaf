@@ -462,7 +462,7 @@ int session_init(int64_t client_id, const char *addr)
 	.addr = ut_strdup(addr)
     };
 
-    struct conn *conn = conn_connect(&server, client_id);
+    struct conn *conn = conn_connect(&server, client_id, NULL);
 
     ut_free(server.addr);
 

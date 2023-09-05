@@ -58,12 +58,12 @@ TESTCASE(conn, connect)
 
     int64_t client_id = 4711;
 
-    CHK(conn_connect(&server_conf, client_id) == NULL);
+    CHK(conn_connect(&server_conf, client_id, "foo") == NULL);
     CHKERRNOEQ(ECONNREFUSED);
 
     ts_start_servers();
 
-    struct conn *conn = conn_connect(&server_conf, client_id);
+    struct conn *conn = conn_connect(&server_conf, client_id, "foo");
 
     CHK(conn != NULL);
 
@@ -112,7 +112,7 @@ TESTCASE(conn, hello_nb)
 
     ts_start_servers();
 
-    struct conn *conn = conn_connect(&server_conf, client_id);
+    struct conn *conn = conn_connect(&server_conf, client_id, NULL);
 
     CHK(conn != NULL);
 
@@ -145,7 +145,7 @@ TESTCASE(conn, hello_and_ping)
 
     ts_start_servers();
 
-    struct conn *conn = conn_connect(&server_conf, client_id);
+    struct conn *conn = conn_connect(&server_conf, client_id, NULL);
 
     int64_t protocol_version = -1;
     CHKNOERR(conn_hello(conn, &protocol_version));
@@ -224,7 +224,7 @@ TESTCASE(conn, subscribe_unsubscribe)
 
     ts_start_servers();
 
-    struct conn *conn = conn_connect(&server_conf, 42);
+    struct conn *conn = conn_connect(&server_conf, 42, "test");
 
     CHKNOERR(conn_hello(conn, NULL));
 
@@ -287,7 +287,7 @@ TESTCASE(conn, subscriptions)
 
     ts_start_servers();
 
-    struct conn *conn = conn_connect(&server_conf, 42);
+    struct conn *conn = conn_connect(&server_conf, 42, NULL);
 
     CHKNOERR(conn_hello(conn, NULL));
 
@@ -342,7 +342,7 @@ TESTCASE(conn, services)
 
     ts_start_servers();
 
-    struct conn *conn = conn_connect(&server_conf, 42);
+    struct conn *conn = conn_connect(&server_conf, 42, NULL);
 
     CHKNOERR(conn_hello(conn, NULL));
 
@@ -428,10 +428,10 @@ TESTCASE(conn, clients)
 
     int64_t connect_time = ut_ftime(CLOCK_REALTIME);
 
-    struct conn *conn0 = conn_connect(&server_conf, client_id0);
+    struct conn *conn0 = conn_connect(&server_conf, client_id0, "client 0");
     CHKNOERR(conn_hello(conn0, NULL));
 
-    struct conn *conn1 = conn_connect(&server_conf, client_id1);
+    struct conn *conn1 = conn_connect(&server_conf, client_id1, "client 1");
     CHKNOERR(conn_hello(conn1, NULL));
 
     struct clients_result result = {};
@@ -474,7 +474,7 @@ TESTCASE(conn, no_hello)
 
     ts_start_servers();
 
-    struct conn *conn = conn_connect(&server_conf, 42);
+    struct conn *conn = conn_connect(&server_conf, 42, NULL);
 
     CHKINTEQ(conn_ping(conn), CONN_ERR_NO_HELLO);
     CHKINTEQ(conn_unsubscribe(conn, 99), CONN_ERR_NO_HELLO);
