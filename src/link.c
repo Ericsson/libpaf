@@ -12,7 +12,6 @@
 #include "conf.h"
 #include "list.h"
 #include "log_link.h"
-#include "proto_ta.h"
 #include "util.h"
 
 #include "link.h"
@@ -27,8 +26,8 @@ static const char *link_state_str(enum link_state state)
 {
     switch (state) {
         SLABEL(connecting);
-        SLABEL(greeting);
         SLABEL(operational);
+        SLABEL(restarting);
         SLABEL(detaching);
         SLABEL(detached);
     default:
@@ -68,38 +67,6 @@ static void clear_tmos(struct link *link)
     ptimer_cancel(link->timer, &link->detached_tmo);
 }
 
-static int64_t get_next_ta_id(struct link *link)
-{
-    return link->next_ta_id++;
-}
-
-static void await(struct xcm_socket *conn, int condition)
-{
-    UT_SAVE_ERRNO;
-    int rc = xcm_await(conn, condition);
-    UT_RESTORE_ERRNO_DC;
-    assert(rc >= 0);
-}
-
-static void queue_request(struct link *link, struct msg *request)
-{
-    bool was_empty = TAILQ_EMPTY(&link->out_queue);
-
-    TAILQ_INSERT_TAIL(&link->out_queue, request, entry);
-
-    if (was_empty)
-	await(link->conn, XCM_SO_SENDABLE|XCM_SO_RECEIVABLE);
-}
-
-static void clear_queue(struct link *link)
-{
-    struct msg *out_msg;
-    while ((out_msg = TAILQ_FIRST(&link->out_queue)) != NULL) {
-        TAILQ_REMOVE(&link->out_queue, out_msg, entry);
-        msg_free(out_msg);
-    }
-}
-
 static void untie_from_sd(struct link *link)
 {
     if (link->listener != NULL) {
@@ -112,88 +79,9 @@ static void untie_from_sd(struct link *link)
 
 static void handle_error(struct link *link);
 
-static void try_flush_queue(struct link *link)
-{
-    if (TAILQ_EMPTY(&link->out_queue))
-	return;
-
-    struct msg *out_msg;
-    while ((out_msg = TAILQ_FIRST(&link->out_queue)) != NULL) {
-        UT_SAVE_ERRNO;
-        int rc = xcm_send(link->conn, out_msg->data, strlen(out_msg->data));
-        UT_RESTORE_ERRNO(send_errno);
-
-        if (rc < 0) {
-            if (send_errno != EAGAIN) {
-                handle_error(link);
-		return;
-	    }
-	    break;
-        }
-
-        log_link_request(link, out_msg->data);
-
-        TAILQ_REMOVE(&link->out_queue, out_msg, entry);
-
-        msg_free(out_msg);
-    }
-
-    if (TAILQ_EMPTY(&link->out_queue))
-	await(link->conn, XCM_SO_RECEIVABLE);
-}
-
-static void clear_tas(struct link *link)
-{
-    struct proto_ta *ta;
-    while ((ta = LIST_FIRST(&link->transactions)) != NULL) {
-        LIST_REMOVE(ta, entry);
-        proto_ta_destroy(ta);
-    }
-}
-
 static bool is_io_capable_state(enum link_state state)
 {
-    return state == link_state_greeting || state == link_state_operational ||
-	state == link_state_detaching;
-}
-
-#define MSG_MAX (65535)
-
-static void try_read_incoming(struct link *link)
-{
-    char* buf = ut_malloc(MSG_MAX);
-    do {
-        UT_SAVE_ERRNO;
-        int rc = xcm_receive(link->conn, buf, MSG_MAX);
-        UT_RESTORE_ERRNO(receive_errno);
-
-        if (rc == 0) {
-            log_link_server_conn_eof(link);
-            handle_error(link);
-            break;
-        } else if (rc < 0) {
-            if (receive_errno == EAGAIN)
-                break;
-            else {
-                log_link_server_conn_error(link, receive_errno);
-                handle_error(link);
-                break;
-            }
-        } else {
-            struct msg *response = msg_create_buf(buf, rc);
-
-	    log_link_response(link, response->data);
-
-	    int rc = proto_ta_consume_response(&link->transactions, response,
-                                               link->log_ref);
-            if (rc < 0) {
-                handle_error(link);
-                break;
-            }
-        }
-    } while (is_io_capable_state(link->state));
-
-    ut_free(buf);
+    return state == link_state_operational || state == link_state_detaching;
 }
 
 static void try_finish_detach(struct link *link)
@@ -224,39 +112,36 @@ static void install_sub_relays(struct link *link);
 static void sd_changed_cb(enum sd_obj_type obj_type, int64_t obj_id,
 			  enum sd_change_type change_type, void *user);
 
-static void hello_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                              void **args, void **optargs, void *user)
+static void hello_complete_cb(int64_t ta_id UT_UNUSED, int64_t proto_version,
+			      void *cb_data)
 {
-    struct link *link = user;
+    struct link *link = cb_data;
 
-    switch (msg_type) {
-    case proto_msg_type_complete: {
-        int64_t *proto_version = args[0];
-        log_link_operational(link, *proto_version);
-	set_state(link, link_state_operational);
-	link->reconnect_time = 0;
-	install_service_relays(link);
-	install_sub_relays(link);
-	link->listener = sd_add_listener(link->sd, sd_changed_cb, link);
-        break;
-    }
-    case proto_msg_type_fail:
-        log_link_ta_failure(link, ta_id, optargs[0]);
-        handle_error(link);
-        break;
-    default:
-        assert(0);
-    }
+    log_link_operational(link, proto_version);
+
+    set_state(link, link_state_operational);
+
+    link->reconnect_time = 0;
+
+    install_service_relays(link);
+    install_sub_relays(link);
+
+    link->listener = sd_add_listener(link->sd, sd_changed_cb, link);
+}
+
+static void fail_cb(int64_t ta_id UT_UNUSED, int fail_reason_err UT_UNUSED,
+		    void *cb_data)
+{
+    struct link *link = cb_data;
+    handle_error(link);
 }
 
 static void sync_service(struct link *link, struct relay *service_relay);
 static void unsync_service(struct link *link, struct relay *service_relay);
 
-static void publish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                                void **args __attribute__((unused)),
-				void **optargs, void *user)
+static void publish_complete_cb(int64_t ta_id, void *cb_data)
 {
-    struct link *link = user;
+    struct link *link = cb_data;
 
     struct relay *service_relay =
 	LIST_FIND(&link->service_relays, sync_ta_id, ta_id, entry);
@@ -264,51 +149,32 @@ static void publish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
     assert(service_relay != NULL);
     assert(service_relay->state == relay_state_syncing);
 
-    switch (msg_type) {
-    case proto_msg_type_complete: {
-        log_link_service_synced(link, service_relay->obj_id);
-        service_relay->state = relay_state_synced;
-	service_relay->sync_ta_id = -1;
-        if (service_relay->pending_unsync)
-            unsync_service(link, service_relay);
-	else if (service_relay->pending_sync)
-            sync_service(link, service_relay);
-        break;
-    }
-    case proto_msg_type_fail:
-        log_link_ta_failure(link, ta_id, optargs[0]);
-        handle_error(link);
-        break;
-    default:
-        assert(0);
-    }
+    log_link_service_synced(link, service_relay->obj_id);
+
+    service_relay->state = relay_state_synced;
+    service_relay->sync_ta_id = -1;
+
+    if (service_relay->pending_unsync)
+	unsync_service(link, service_relay);
+    else if (service_relay->pending_sync)
+	sync_service(link, service_relay);
 }
 
 static void sync_sub(struct link *link, struct relay *sub_relay);
 static void unsync_sub(struct link *link, struct relay *sub_relay);
 
-static void unpublish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                                  void **args __attribute__((unused)),
-				  void **optargs, void *user)
+static void unpublish_complete_cb(int64_t ta_id, void *cb_data)
 {
-    struct link *link = user;
+    struct link *link = cb_data;
 
-    switch (msg_type) {
-    case proto_msg_type_complete: {
-        struct relay *service_relay =
-	    LIST_FIND(&link->service_relays, unsync_ta_id, ta_id, entry);
-        log_link_service_unsynced(link, service_relay->obj_id);
-	LIST_REMOVE(service_relay, entry);
-	relay_destroy(service_relay);
-        break;
-    }
-    case proto_msg_type_fail:
-        log_link_ta_failure(link, ta_id, optargs[0]);
-        handle_error(link);
-        break;
-    default:
-        assert(0);
-    }
+    struct relay *service_relay =
+	LIST_FIND(&link->service_relays, unsync_ta_id, ta_id, entry);
+
+    log_link_service_unsynced(link, service_relay->obj_id);
+
+    LIST_REMOVE(service_relay, entry);
+
+    relay_destroy(service_relay);
 }
 
 static void check_sub_relay_removal(struct link *link,
@@ -323,88 +189,67 @@ static void check_sub_relay_removal(struct link *link,
     }
 }
 
-static void subscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                                  void **args, void **optargs, void *user)
+static void subscribe_accept_cb(int64_t ta_id, void *cb_data)
 {
-    struct link *link = user;
-
+    struct link *link = cb_data;
     struct relay *sub_relay =
 	LIST_FIND(&link->sub_relays, sync_ta_id, ta_id, entry);
-    assert(sub_relay != NULL);
 
-    switch (msg_type) {
-    case proto_msg_type_accept: {
-	assert(sub_relay->state == relay_state_syncing);
+    log_link_sub_synced(link, sub_relay->obj_id);
 
-        log_link_sub_synced(link, sub_relay->obj_id);
-        sub_relay->state = relay_state_synced;
-        if (sub_relay->pending_unsync)
-            unsync_sub(link, sub_relay);
-        else if (sub_relay->pending_sync)
-            sync_sub(link, sub_relay);
-        break;
-    }
-    case proto_msg_type_notify: {
-	assert(sub_relay->state == relay_state_synced ||
-	       sub_relay->state == relay_state_unsyncing);
+    sub_relay->state = relay_state_synced;
 
-        const enum paf_match_type *server_match_type = args[0];
-        const int64_t *service_id = args[1];
-
-        const int64_t *generation = optargs[0];
-        const struct paf_props *props = optargs[1];
-        const int64_t *ttl = optargs[2];
-        const double *orphan_since = optargs[3];
-
-	log_link_sub_match(link, sub_relay->obj_id);
-
-	if (sub_relay->state == relay_state_unsyncing ||
-	    sub_relay->pending_unsync || link->state == link_state_detaching) {
-	    log_link_sub_match_ignored(link);
-	    break;
-	}
-
-        if (sd_report_match(link->sd, link->link_id, sub_relay->obj_id,
-			    *server_match_type, *service_id, generation,
-			    props, ttl, orphan_since) < 0)
-	    handle_error(link);
-        break;
-    }
-    case proto_msg_type_complete:
-	sub_relay->sync_ta_id = -1;
-	check_sub_relay_removal(link, sub_relay);
-        break;
-    case proto_msg_type_fail:
-        log_link_ta_failure(link, ta_id, optargs[0]);
-        handle_error(link);
-        break;
-    default:
-        assert(0);
-    }
+    if (sub_relay->pending_unsync)
+	unsync_sub(link, sub_relay);
+    else if (sub_relay->pending_sync)
+	sync_sub(link, sub_relay);
 }
 
-static void unsubscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-                                    void **args __attribute__((unused)),
-				    void **optargs, void *user)
+static void subscribe_notify_cb(int64_t ta_id, enum paf_match_type match_type,
+				int64_t service_id, const int64_t *generation,
+				const struct paf_props *props,
+				const int64_t *ttl, const double *orphan_since,
+				void *cb_data)
 {
-    struct link *link = user;
+    struct link *link = cb_data;
+    struct relay *sub_relay =
+	LIST_FIND(&link->sub_relays, sync_ta_id, ta_id, entry);
 
+    assert(sub_relay->state == relay_state_synced ||
+	   sub_relay->state == relay_state_unsyncing);
+
+    log_link_sub_match(link, sub_relay->obj_id);
+
+    if (sub_relay->state == relay_state_unsyncing ||
+	sub_relay->pending_unsync || link->state == link_state_detaching) {
+	log_link_sub_match_ignored(link);
+	return;
+    }
+
+    if (sd_report_match(link->sd, link->link_id, sub_relay->obj_id,
+			match_type, service_id, generation,
+			props, ttl, orphan_since) < 0)
+	handle_error(link);
+}
+
+static void subscribe_complete_cb(int64_t ta_id, void *cb_data)
+{
+    struct link *link = cb_data;
+    struct relay *sub_relay =
+	LIST_FIND(&link->sub_relays, sync_ta_id, ta_id, entry);
+
+    sub_relay->sync_ta_id = -1;
+    check_sub_relay_removal(link, sub_relay);
+}
+
+static void unsubscribe_complete_cb(int64_t ta_id, void *cb_data)
+{
+    struct link *link = cb_data;
     struct relay *sub_relay =
 	LIST_FIND(&link->sub_relays, unsync_ta_id, ta_id, entry);
-    assert(sub_relay != NULL);
 
-    switch (msg_type) {
-    case proto_msg_type_complete:
-	sub_relay->unsync_ta_id = -1;
-	check_sub_relay_removal(link, sub_relay);
-        break;
-    case proto_msg_type_fail:
-        log_link_ta_failure(link, ta_id, optargs[0]);
-        handle_error(link);
-        break;
-    default:
-        assert(0);
-    }
+    sub_relay->unsync_ta_id = -1;
+    check_sub_relay_removal(link, sub_relay);
 }
 
 static void sync_service(struct link *link, struct relay *service_relay)
@@ -417,16 +262,10 @@ static void sync_service(struct link *link, struct relay *service_relay)
 
     struct service *service = sd_get_service(link->sd, service_relay->obj_id);
 
-    int64_t ta_id = get_next_ta_id(link);
-    struct proto_ta *publish_ta =
-        proto_ta_publish(ta_id, link->log_ref, publish_response_cb, link);
-    LIST_INSERT_HEAD(&link->transactions, publish_ta, entry);
-    struct msg *publish_request =
-        proto_ta_produce_request(publish_ta, service->service_id,
-				 service->generation, service->props,
-				 service->ttl);
-    queue_request(link, publish_request);
-    service_relay->sync_ta_id = ta_id;
+    service_relay->sync_ta_id =
+	conn_publish_nb(link->conn, service->service_id, service->generation,
+			service->props, service->ttl, fail_cb,
+			publish_complete_cb, link);
 
     log_link_service_sync(link, service_relay->obj_id,
 			  service_relay->sync_ta_id);
@@ -442,17 +281,12 @@ static void unsync_service(struct link *link, struct relay *service_relay)
 
     service_relay->pending_unsync = false;
 
-    int64_t ta_id = get_next_ta_id(link);
-    struct proto_ta *unpublish_ta =
-        proto_ta_unpublish(ta_id, link->log_ref, unpublish_response_cb,
-                           link);
-    LIST_INSERT_HEAD(&link->transactions, unpublish_ta, entry);
-    struct msg *unpublish_request =
-	proto_ta_produce_request(unpublish_ta, service_relay->obj_id);
-    queue_request(link, unpublish_request);
-    service_relay->unsync_ta_id = ta_id;
+    service_relay->unsync_ta_id =
+	conn_unpublish_nb(link->conn, service_relay->obj_id, fail_cb,
+			  unpublish_complete_cb, link);
 
-    log_link_service_unsync(link, service_relay->obj_id, ta_id);
+    log_link_service_unsync(link, service_relay->obj_id,
+			    service_relay->unsync_ta_id);
 
     service_relay->state = relay_state_unsyncing;
 }
@@ -464,14 +298,10 @@ static void sync_sub(struct link *link, struct relay *sub_relay)
 
     struct sub *sub = sd_get_sub(link->sd, sub_relay->obj_id);
 
-    sub_relay->sync_ta_id = get_next_ta_id(link);
-    struct proto_ta *subscribe_ta =
-        proto_ta_subscribe(sub_relay->sync_ta_id, link->log_ref,
-			   subscribe_response_cb, link);
-    LIST_INSERT_HEAD(&link->transactions, subscribe_ta, entry);
-    struct msg *subscribe_request =
-        proto_ta_produce_request(subscribe_ta, sub->sub_id, sub->filter_str);
-    queue_request(link, subscribe_request);
+    sub_relay->sync_ta_id =
+	conn_subscribe_nb(link->conn, sub->sub_id, sub->filter_str,
+			  fail_cb, subscribe_accept_cb, subscribe_notify_cb,
+			  subscribe_complete_cb, link);
 
     log_link_sub_sync(link, sub_relay->obj_id, sub_relay->sync_ta_id);
 
@@ -484,14 +314,9 @@ static void unsync_sub(struct link *link, struct relay *sub_relay)
 	   link->state == link_state_detaching);
     assert(sub_relay->state == relay_state_synced);
 
-    sub_relay->unsync_ta_id = get_next_ta_id(link);
-    struct proto_ta *unsubscribe_ta =
-        proto_ta_unsubscribe(sub_relay->unsync_ta_id, link->log_ref,
-			     unsubscribe_response_cb, link);
-    LIST_INSERT_HEAD(&link->transactions, unsubscribe_ta, entry);
-    struct msg *unsubscribe_request =
-        proto_ta_produce_request(unsubscribe_ta, sub_relay->obj_id);
-    queue_request(link, unsubscribe_request);
+    sub_relay->unsync_ta_id =
+	conn_unsubscribe_nb(link->conn, sub_relay->obj_id, fail_cb,
+			    unsubscribe_complete_cb, link);
 
     log_link_sub_unsync(link, sub_relay->obj_id, sub_relay->unsync_ta_id);
 
@@ -642,8 +467,6 @@ static void clear_sub_relays(struct link *link)
 
 static void clear(struct link *link)
 {
-    clear_queue(link);
-    clear_tas(link);
     clear_service_relays(link);
     clear_sub_relays(link);
     clear_tmos(link);
@@ -731,9 +554,6 @@ struct link *link_create(int64_t link_id, int64_t client_id,
 
     epoll_reg_init(&link->epoll_reg, epoll_fd, link_log_ref);
 
-    TAILQ_INIT(&link->out_queue);
-    LIST_INIT(&link->transactions);
-
     log_link_start(link);
 
     link->state = link_state_connecting;
@@ -763,65 +583,12 @@ static void assure_reconnect_tmo(struct link *link)
 			  &link->reconnect_tmo);
 }
 
-static void restart(struct link *link)
-{
-    log_link_restart(link);
-
-    epoll_reg_reset(&link->epoll_reg);
-
-    untie_from_sd(link);
-
-    if (link->conn != NULL) {
-	xcm_close(link->conn);
-	link->conn = NULL;
-    }
-
-    clear(link);
-
-    set_state(link, link_state_connecting);
-
-    assure_reconnect_tmo(link);
-}
-
 static void handle_error(struct link *link)
 {
     if (link->state != link_state_detaching)
-	restart(link);
+	link->state = link_state_restarting;
     else
 	link->state = link_state_detached;
-}
-
-static bool is_tcp_based(const char *addr)
-{
-    const char *tls_based_protos[] = { "tcp", "tls", "utls" };
-
-    size_t i;
-    for (i = 0; i < UT_ARRAY_LEN(tls_based_protos); i++) {
-	const char *proto = tls_based_protos[i];
-
-	if (strncmp(proto, addr, strlen(proto)) == 0)
-	    return true;
-    }
-
-    return false;
-}
-
-static void add_non_null(struct xcm_attr_map *attrs,
-			 const char *attr_name,
-			 const char *attr_value)
-{
-    if (attr_value != NULL)
-	xcm_attr_map_add_str(attrs, attr_name, attr_value);
-}
-
-static void consider_adding_dns_attrs(const char *addr,
-				      struct xcm_attr_map *attrs)
-{
-    bool supports_dns_algorithm_attr =
-	xcm_version_api_major() >= 1 || xcm_version_api_minor() >= 24;
-
-    if (supports_dns_algorithm_attr && is_tcp_based(addr))
-	xcm_attr_map_add_str(attrs, "dns.algorithm", "happy_eyeballs");
 }
 
 static void try_connect(struct link *link)
@@ -833,86 +600,43 @@ static void try_connect(struct link *link)
 
     ptimer_ack(link->timer, &link->reconnect_tmo);
 
-    int old_ns_fd = -1;
-
-    if (link->server->net_ns != NULL) {
-	UT_SAVE_ERRNO;
-	old_ns_fd = ut_net_ns_enter(link->server->net_ns);
-	UT_RESTORE_ERRNO(net_ns_errno);
-
-	if (old_ns_fd < 0) {
-	    log_link_net_ns_enter_failed(link, link->server->net_ns,
-					 net_ns_errno);
-	    goto err_reconnect;
-	}
-
-	log_link_net_ns_entered(link, link->server->net_ns);
-    }
-
     UT_SAVE_ERRNO;
 
-    struct xcm_attr_map *attrs = xcm_attr_map_create();
+    link->conn = conn_connect(link->server, link->client_id, link->log_ref);
 
-    xcm_attr_map_add_bool(attrs, "xcm.blocking", false);
+    UT_RESTORE_ERRNO_DC;
 
-    consider_adding_dns_attrs(link->server->addr, attrs);
-
-    add_non_null(attrs, "xcm.local_addr", link->server->local_addr);
-
-    add_non_null(attrs, "tls.cert_file", link->server->cert_file);
-    add_non_null(attrs, "tls.key_file", link->server->key_file);
-    add_non_null(attrs, "tls.tc_file", link->server->tc_file);
-
-    if (link->server->crl_file != NULL)  {
-	xcm_attr_map_add_bool(attrs, "tls.check_crl", true);
-	xcm_attr_map_add_str(attrs, "tls.crl_file", link->server->crl_file);
-    }
-
-    link->conn = xcm_connect_a(link->server->addr, attrs);
-
-    xcm_attr_map_destroy(attrs);
-
-    UT_RESTORE_ERRNO(connect_errno);
-
-    if (old_ns_fd != -1) {
-	UT_SAVE_ERRNO;
-	int rc = ut_net_ns_return(old_ns_fd);
-	UT_RESTORE_ERRNO(net_ns_errno);
-
-	if (rc < 0) {
-	    log_link_net_ns_return_failed(link, link->server->net_ns,
-					  net_ns_errno);
-	    goto err_reconnect;
-	}
-
-	log_link_net_ns_entered(link, link->server->net_ns);
-    }
-	
     if (link->conn == NULL) {
-        log_link_xcm_connect_failed(link, link->server->addr, connect_errno);
-	goto err_reconnect;
+	assure_reconnect_tmo(link);
+	return;
     }
 
-    log_link_xcm_initiated(link, link->server->addr);
-
-    epoll_reg_add(&link->epoll_reg, xcm_fd(link->conn), EPOLLIN);
+    epoll_reg_add(&link->epoll_reg, conn_get_fd(link->conn), EPOLLIN);
 
     ptimer_cancel(link->timer, &link->reconnect_tmo);
 
-    set_state(link, link_state_greeting);
+    set_state(link, link_state_operational);
 
-    struct proto_ta *hello_ta = proto_ta_hello(get_next_ta_id(link),
-                                               link->log_ref,
-                                               hello_response_cb, link);
-    LIST_INSERT_HEAD(&link->transactions, hello_ta, entry);
-    struct msg *hello_request =
-        proto_ta_produce_request(hello_ta, link->client_id, PROTO_VERSION,
-				 PROTO_VERSION);
-    queue_request(link, hello_request);
+    conn_hello_nb(link->conn, fail_cb, hello_complete_cb, link);
+}
 
-    return;
+static void restart(struct link *link)
+{
+    log_link_restart(link);
 
-err_reconnect:
+    epoll_reg_reset(&link->epoll_reg);
+
+    untie_from_sd(link);
+
+    if (link->conn != NULL) {
+	conn_close(link->conn);
+	link->conn = NULL;
+    }
+
+    clear(link);
+
+    set_state(link, link_state_connecting);
+
     assure_reconnect_tmo(link);
 }
 
@@ -924,24 +648,22 @@ int link_process(struct link *link)
         try_connect(link);
 
     if (is_io_capable_state(link->state)) {
-	size_t ta_count =
-	    LIST_COUNT(&link->transactions, entry);
 	size_t service_relay_count =
 	    LIST_COUNT(&link->service_relays, entry);
 	size_t sub_relay_count =
 	    LIST_COUNT(&link->sub_relays, entry);
-	log_link_ongoing_ta(link, ta_count);
 	log_link_service_count(link, service_relay_count);
 	log_link_sub_count(link, sub_relay_count);
 
-        try_flush_queue(link);
+	if (conn_process(link->conn) < 0)
+	    handle_error(link);
     }
-
-    if (is_io_capable_state(link->state))
-        try_read_incoming(link);
 
     if (link->state == link_state_detaching)
         try_finish_detach(link);
+
+    if (link->state == link_state_restarting)
+	restart(link);
 
     int rc = 0;
 
@@ -979,7 +701,7 @@ void link_destroy(struct link *link)
 	untie_from_sd(link);
 
         if (link->conn != NULL)
-            xcm_close(link->conn);
+            conn_close(link->conn);
 
 	clear(link);
         log_link_destroy(link);

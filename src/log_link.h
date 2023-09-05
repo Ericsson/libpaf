@@ -40,41 +40,6 @@
 #define log_link_destroy(link)						\
     log_link_debug(link, "Link destroyed.")
 
-#define log_link_net_ns_entered(link, ns_name)				\
-    log_link_debug(link, "Entered network namespace \"%s\".", ns_name)
-
-#define log_link_net_ns_returned(link, ns_name)				\
-    log_link_debug(link, "Returned from network namespace \"%s\".", ns_name)
-
-#define log_link_net_ns_op_failed(link, op_name, ns_name, net_ns_errno) \
-    log_link_debug(link, "Failed to %s network namespace \"%s\"; "	\
-		   "errno %d (%s).", op_name, ns_name, net_ns_errno,	\
-		   strerror(net_ns_errno))
-
-#define log_link_net_ns_enter_failed(link, ns_name, net_ns_errno)	\
-    log_link_net_ns_op_failed(link, "enter", ns_name, net_ns_errno)
-
-#define log_link_net_ns_return_failed(link, ns_name, net_ns_errno)	\
-    log_link_net_ns_op_failed(link, "return from", ns_name,		\
-			      net_ns_errno)
-
-#define log_link_xcm_op_failed(link, op_desc, xcm_addr, xcm_errno)	\
-    log_link_debug(link, "XCM %s to %s "				\
-		   "failed; errno %d (%s).", op_desc, xcm_addr, xcm_errno, \
-		   strerror(xcm_errno))
-
-#define log_link_xcm_connect_failed(link, xcm_addr, xcm_errno)		\
-    log_link_xcm_op_failed(link, "connection initiation", xcm_addr,	\
-			   xcm_errno)
-
-#define log_link_tls_conf_old_xcm(link)					\
-    log_link_error(link, "Link unable to handle TLS configuration: "	\
-		   "build-time libxcm too old.")
-
-#define log_link_xcm_initiated(link, remote_addr)			\
-    log_link_debug(link, "Successfully initiated XCM connection to %s.", \
-		   remote_addr)
-
 #define log_link_operational(link, protocol_version)			\
     log_link_debug(link, "Operational using protocol "			\
 		   "version %"PRId64".", protocol_version)
@@ -87,9 +52,6 @@
     log_link_debug(link, "Transition from state %s to %s.", \
 		   from_state, to_state)
     
-#define log_link_ongoing_ta(link, count)				\
-    log_link_debug(link, "%zd protocol transactions in progress.", count)
-
 #define log_link_service_count(link, count)				\
     log_link_debug(link, "%zd service relays installed.", count)
 
@@ -108,16 +70,6 @@
 
 #define log_link_response(link, response_str)				\
     log_link_debug(link, "Incoming response: %s.", response_str)
-
-#define log_link_ta_failure(link, ta_id, reason)			\
-    do {                                                                \
-        if (reason != NULL)                                             \
-            log_link_debug(link, "Transaction id %"PRId64		\
-			   " failed: \"%s\".", ta_id, reason);		\
-        else                                                            \
-            log_link_debug(link, "Transaction id %"PRId64		\
-			   " failed.", ta_id);				\
-    } while (0)
 
 #define log_link_relay(link, type, action, obj_id)		 \
     log_link_debug(link, "%s relay for %s with id 0x%"PRIx64".", \

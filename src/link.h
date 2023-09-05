@@ -8,8 +8,7 @@
 
 #include <stdint.h>
 
-#include <xcm.h>
-
+#include "conn.h"
 #include "epoll_reg.h"
 #include "list.h"
 #include "msg.h"
@@ -22,7 +21,6 @@
 
 enum link_state {
     link_state_connecting,
-    link_state_greeting,
     link_state_operational,
     link_state_restarting,
     link_state_detaching,
@@ -70,14 +68,13 @@ struct link
     int64_t reconnect_tmo;
     double reconnect_time;
 
-    struct xcm_socket *conn;
+    struct conn *conn;
 
     int64_t detached_tmo;
     double max_detach_time;
 
     int64_t next_ta_id;
     struct msg_queue out_queue;
-    struct proto_ta_list transactions;
 
     char *log_ref;
 
