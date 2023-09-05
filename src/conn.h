@@ -12,8 +12,6 @@
 #include "paf_match.h"
 #include "server_conf.h"
 
-#define CONN_CLIENT_ID_ANY INT64_C(-1)
-
 struct conn;
 
 struct conn *conn_connect(const struct server_conf *server_conf,

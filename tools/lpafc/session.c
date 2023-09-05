@@ -54,7 +54,7 @@ static void run_quit(const char *cmd, const char *const *args, size_t num,
     "    Show client identifier.\n"
 
 static void run_id(const char *cmd, const char *const *args, size_t num,
-		     void *cb_data UT_UNUSED)
+		   void *cb_data UT_UNUSED)
 {
     int64_t client_id = conn_get_client_id(session.conn);
 
@@ -462,7 +462,14 @@ int session_init(int64_t client_id, const char *addr)
 	.addr = ut_strdup(addr)
     };
 
-    struct conn *conn = conn_connect(&server, client_id, NULL);
+    char log_ref[1024];
+
+    if (client_id < 0)
+	client_id = ut_rand_id();
+
+    snprintf(log_ref, sizeof(log_ref), "client: %"PRId64, client_id);
+
+    struct conn *conn = conn_connect(&server, client_id, log_ref);
 
     ut_free(server.addr);
 

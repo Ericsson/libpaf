@@ -151,15 +151,12 @@ struct conn *conn_connect(const struct server_conf *server_conf,
 {
     struct conn *conn = ut_malloc(sizeof(struct conn));
 
-    if (client_id == CONN_CLIENT_ID_ANY)
-	client_id = ut_rand_id();
+    assert(client_id >= 0);
 
     *conn = (struct conn) {
 	.client_id = client_id,
 	.log_ref = ut_strdup_non_null(log_ref)
     };
-
-    assert(conn->client_id >= 0);
 
     LIST_INIT(&conn->calls);
     LIST_INIT(&conn->transactions);
