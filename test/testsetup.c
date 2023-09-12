@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <xcm_addr.h>
 
+#include "conn.h"
 #include "util.h"
 #include "testutil.h"
 
@@ -427,20 +428,17 @@ void ts_domain_teardown(void)
     }
 }
 
-#define TCLIENT "./test/tclient.py"
+#define CONNECT_RETRIES 100
+#define CONNECT_RETRY_INTERVAL_MS 10
 
-static int tclient(const struct server *server,
-		   const char *cmd_fmt, ...)
+static struct conn *server_connect(const struct server *server)
 {
-    va_list ap;
-    va_start(ap, cmd_fmt);
+    struct server_conf server_conf = {
+	.net_ns = server->net_ns,
+	.addr = server->addr
+    };
 
-    int old_ns_fd = -1;
-    if (server->net_ns != NULL) {
-	old_ns_fd = ut_net_ns_enter(server->net_ns);
-	if (old_ns_fd < 0)
-	    return -1;
-    }
+    int64_t client_id = ut_rand_id();
 
     char *old_cert_dir = NULL;
 
@@ -449,77 +447,166 @@ static int tclient(const struct server *server,
 	old_cert_dir = ut_strdup(env);
 
     if (setenv("XCM_TLS_CERT", TS_CLIENT_CERT_DIR, 1) < 0)
-	return -1;
+	abort();
 
-    char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "%s %s ", TCLIENT, server->addr);
+    struct conn *conn;
+    int i;
+    for (i = 0; i < CONNECT_RETRIES; i++) {
 
-    vsnprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd),
-	      cmd_fmt, ap);
+	conn = conn_connect(&server_conf, client_id, NULL);
 
-    int rc = tu_executef_es(cmd);
+	if (conn != NULL)
+	    break;
+
+	tu_msleep(CONNECT_RETRY_INTERVAL_MS);
+    }
+
+    if (conn != NULL && conn_hello(conn, NULL) < 0) {
+	conn_close(conn);
+	conn = NULL;
+    }
 
     if (old_cert_dir != NULL) {
 	if (setenv("XCM_TLS_CERT", old_cert_dir, 1) < 0)
-	    return -1;
+	    abort();
 	ut_free(old_cert_dir);
     } else if (unsetenv("XCM_TLS_CERT") < 0)
-	return -1;
+	abort();
 
-    if (server->net_ns != NULL && ut_net_ns_return(old_ns_fd) < 0)
-	return -1;
-
-    return rc;
+    return conn;
 }
 
 int ts_assure_server_up(struct server *server)
 {
-    return tclient(server, "assure-up");
+    int rc = -1;
+
+    struct conn *conn = server_connect(server);
+
+    if (conn == NULL)
+	goto out;
+
+    if (conn_ping(conn) < 0)
+	goto out_close;
+
+    rc = 0;
+
+out_close:
+    conn_close(conn);
+out:
+    return rc;
 }
 
-int ts_assure_client_from(struct server *server, const char *client_remote_addr)
+struct count_client_state
 {
-    return tclient(server, "assure-client-from %s", client_remote_addr);
+    const char *client_addr;
+    int count;
+};
+
+static void count_client_cb(int64_t client_id, const char *client_addr,
+			    int64_t connect_time, void *cb_data)
+{
+    struct count_client_state *state = cb_data;
+
+    if (state->client_addr == NULL ||
+	strcmp(state->client_addr, client_addr) == 0)
+	state->count++;
 }
 
+static int assure_client_count(struct server *server, const char *client_addr,
+			       int count)
+
+{
+    int rc = -1;
+
+    struct conn *conn = server_connect(server);
+
+    if (conn == NULL)
+	goto out;
+
+    struct count_client_state state = {
+	.client_addr = client_addr
+    };
+
+    if (conn_clients(conn, count_client_cb, &state) < 0)
+	goto out_close;
+
+    /* is this client expected to be included in the count? */
+    if (client_addr == NULL ||
+	strcmp(conn_get_local_addr(conn), client_addr) == 0)
+	state.count--;
+
+    if (state.count == count)
+	rc = 0;
+
+out_close:
+    conn_close(conn);
+out:
+    return rc;
+}
+
+int ts_assure_client_from(struct server *server, const char *client_addr)
+{
+    return assure_client_count(server, client_addr, 1);
+}
 
 int ts_assure_client_count(struct server *server, int count)
 
 {
-    return tclient(server, "assure-client-count %d", count);
+    return assure_client_count(server, NULL, count);
 }
 
-static void add_prop(const char *prop_name, const struct paf_value *prop_value,
-                     void *user)
+struct count_service_state
 {
-    char *cmd = user;
+    int64_t service_id;
+    const struct paf_props *props;
+    int count;
+};
 
-    snprintf(cmd+strlen(cmd), 1024, " %s ", prop_name);
+static void count_service_cb(int64_t service_id, int64_t generation,
+			     const struct paf_props *props,
+			     int64_t ttl, int64_t client_id,
+			     const double *orphan_since, void *cb_data)
+{
+    struct count_service_state *state = cb_data;
 
-    if (paf_value_is_str(prop_value))
-        snprintf(cmd+strlen(cmd), 1024, "%s", paf_value_str(prop_value));
-    else
-        snprintf(cmd+strlen(cmd), 1024, "%"PRId64" ",
-                 paf_value_int64(prop_value));
+    if ((state->service_id < 0 || state->service_id == service_id) &&
+	(state->props == NULL || paf_props_equal(props, state->props)))
+	state->count++;
+}
+
+static int server_assure_service_count(struct server *server,
+				       int64_t service_id,
+				       const struct paf_props *props,
+				       int count)
+{
+    int rc = -1;
+
+    struct conn *conn = server_connect(server);
+
+    if (conn == NULL)
+	goto out;
+
+    struct count_service_state state = {
+	.service_id = service_id,
+	.props = props
+    };
+
+    if (conn_services(conn, NULL, count_service_cb, &state) < 0)
+	goto out_close;
+
+    if (state.count == count)
+	rc = 0;
+
+out_close:
+    conn_close(conn);
+out:
+    return rc;
 }
 
 int ts_server_assure_service(struct server *server, int64_t service_id,
 			     const struct paf_props *props)
 {
-    char cmd[4096];
-
-    strcpy(cmd, "assure-service");
-
-    if (service_id >= 0)
-        snprintf(cmd+strlen(cmd), sizeof(cmd)-strlen(cmd),
-                 " %"PRIx64" ", service_id);
-    else
-        snprintf(cmd+strlen(cmd), sizeof(cmd)-strlen(cmd),
-                 " any ");
-
-    paf_props_foreach(props, add_prop, cmd);
-
-    return tclient(server, cmd);
+    return server_assure_service_count(server, service_id, props, 1);
 }
 
 int ts_assure_service(int64_t service_id, const struct paf_props *props)
@@ -536,7 +623,7 @@ int ts_assure_service(int64_t service_id, const struct paf_props *props)
 
 int ts_server_assure_service_count(struct server *server, int count)
 {
-    return tclient(server, "assure-service-count %d", count);
+    return server_assure_service_count(server, -1, NULL, count);
 }
 
 int ts_assure_service_count(int count)
@@ -550,11 +637,48 @@ int ts_assure_service_count(int count)
     return 0;
 }
 
+struct count_subscription_state
+{
+    int64_t sub_id;
+    const char *filter;
+    int count;
+};
+
+static void count_subscription_cb(int64_t sub_id, int64_t client_id,
+				  const char *filter, void *cb_data)
+{
+    struct count_subscription_state *state = cb_data;
+
+    if ((state->sub_id < 0 || state->sub_id == sub_id) &&
+	(state->filter == NULL || strcmp(filter, state->filter) == 0))
+	state->count++;
+}
+
 int ts_server_assure_subscription(struct server *server, int64_t sub_id,
 				  const char *filter)
 {
-    return tclient(server, "assure-subscription %"PRIx64" '%s'", sub_id,
-		   filter);
+    int rc = -1;
+
+    struct conn *conn = server_connect(server);
+
+    if (conn == NULL)
+	goto out;
+
+    struct count_subscription_state state = {
+	.sub_id = sub_id,
+	.filter = filter
+    };
+
+    if (conn_subscriptions(conn, count_subscription_cb, &state) < 0)
+	goto out_close;
+
+    if (state.count == 1)
+	rc = 0;
+
+out_close:
+    conn_close(conn);
+out:
+    return rc;
 }
 
 int ts_assure_subscription(int64_t sub_id, const char *filter)

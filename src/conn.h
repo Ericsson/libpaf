@@ -66,8 +66,8 @@ int64_t conn_subscriptions_nb(struct conn *conn, conn_fail_cb fail_cb,
 			      conn_subscriptions_notify_cb notify_cb,
 			      conn_ta_cb complete_cb, void *cb_data);
 
-typedef void (*conn_subscriptions_cb)( int64_t sub_id, int64_t client_id,
-				       const char *filter, void *cb_data);
+typedef void (*conn_subscriptions_cb)(int64_t sub_id, int64_t client_id,
+				      const char *filter, void *cb_data);
 int conn_subscriptions(struct conn *conn, conn_subscriptions_cb cb,
 		       void *cb_data);
 
@@ -80,18 +80,14 @@ typedef void (*conn_services_notify_cb)(int64_t ta_id, int64_t service_id,
 					const double *orphan_since,
 					void *cb_data);
 int64_t conn_services_nb(struct conn *conn, const char *filter,
-			 conn_fail_cb fail_cb,
-			 conn_ta_cb accept_cb,
+			 conn_fail_cb fail_cb, conn_ta_cb accept_cb,
 			 conn_services_notify_cb notify_cb,
 			 conn_ta_cb complete_cb, void *cb_data);
 
-typedef void (*conn_services_cb)(int64_t service_id,
-				 int64_t generation,
+typedef void (*conn_services_cb)(int64_t service_id, int64_t generation,
 				 const struct paf_props *props,
-				 int64_t ttl,
-				 int64_t client_id,
-				 const double *orphan_since,
-				 void *cb_data);
+				 int64_t ttl, int64_t client_id,
+				 const double *orphan_since, void *cb_data);
 int conn_services(struct conn *conn, const char *filter,
 		  conn_services_cb cb, void *cb_data);
 
