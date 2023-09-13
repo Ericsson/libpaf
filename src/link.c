@@ -26,6 +26,7 @@ static const char *link_state_str(enum link_state state)
 {
     switch (state) {
         SLABEL(connecting);
+        SLABEL(greeting);
         SLABEL(operational);
         SLABEL(restarting);
         SLABEL(detaching);
@@ -81,7 +82,14 @@ static void handle_error(struct link *link);
 
 static bool is_io_capable_state(enum link_state state)
 {
-    return state == link_state_operational || state == link_state_detaching;
+    switch (state) {
+    case link_state_greeting:
+    case link_state_operational:
+    case link_state_detaching:
+	return true;
+    default:
+	return false;
+    }
 }
 
 static void try_finish_detach(struct link *link)
@@ -615,7 +623,7 @@ static void try_connect(struct link *link)
 
     ptimer_cancel(link->timer, &link->reconnect_tmo);
 
-    set_state(link, link_state_operational);
+    set_state(link, link_state_greeting);
 
     conn_hello_nb(link->conn, fail_cb, hello_complete_cb, link);
 }

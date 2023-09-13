@@ -21,6 +21,7 @@
 
 enum link_state {
     link_state_connecting,
+    link_state_greeting,
     link_state_operational,
     link_state_restarting,
     link_state_detaching,
