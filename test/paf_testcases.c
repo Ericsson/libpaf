@@ -419,7 +419,7 @@ static void count_match_cb(enum paf_match_type match_type, int64_t service_id,
 
 static pid_t __attribute__ ((noinline))
 bg_publisher(const char *domain_name,
-	     const struct paf_props *props, double duration)
+	     const struct paf_props *props, int ttl, double duration)
 {
     pid_t pid = fork();
 
@@ -427,11 +427,20 @@ bg_publisher(const char *domain_name,
         return -1;
     else if (pid == 0) {
         struct paf_context *context = paf_attach(domain_name);
-        if (!context)
+
+        if (context == NULL)
             exit(EXIT_FAILURE);
-        paf_publish(context, props);
+
+        int64_t service_id = paf_publish(context, props);
+
+	if (service_id < 0)
+	    exit(EXIT_FAILURE);
+
+	paf_set_ttl(context, service_id, ttl);
+
         if (wait_for(context, duration) < 0)
             exit(EXIT_FAILURE);
+
         paf_close(context);
         exit(EXIT_SUCCESS);
     } else
@@ -451,7 +460,7 @@ TESTCASE_F(paf, subscribe_flaky_server, REQUIRE_NO_LOCAL_PORT_BIND)
     struct paf_props *props = paf_props_create();
     paf_props_add_str(props, "name", "foo");
 
-    pid_t bg_pid = bg_publisher(ts_domain_name, props, 5.0);
+    pid_t bg_pid = bg_publisher(ts_domain_name, props, 2, 5);
 
     CHKNOERR(bg_pid);
 
@@ -476,7 +485,7 @@ TESTCASE_F(paf, subscribe_flaky_server, REQUIRE_NO_LOCAL_PORT_BIND)
 
     /* the library should have filtered the 'appeared' event, since
        this is a previously known service */
-    CHK(hits == 1);
+    CHKINTEQ(hits, 1);
 
     while (hits != 2)
         CHKNOERR(wait_for(context, 0.1));
