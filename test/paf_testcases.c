@@ -1078,6 +1078,8 @@ TESTCASE(paf, change_domains_file)
     CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
 
     CHKNOERR(ts_server_assure_service(&server_b, service_id, props));
+
+    CHKNOERR(wait_for(context, TTL));
     CHK(ts_server_assure_service(&server_a, service_id, props) < 0);
 
     paf_detach(context);
