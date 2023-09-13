@@ -60,6 +60,16 @@ AS_IF([test "x$enable_lttng" != "xno"], [
 	             [AC_MSG_ERROR([Unable to find the lttng-ust library. Disable LTTng to avoid this dependency.])])
 ])
 
+AC_ARG_ENABLE([valgrind],
+    AS_HELP_STRING([--enable-valgrind], [use Valgrind when running tests]))
+
+AS_IF([test "x$enable_valgrind" = "xyes"], [
+	AC_CHECK_PROG(valgrind, [],
+                 [AC_MSG_ERROR([Unable to find Valgrind executable.])])
+])
+
+AM_CONDITIONAL([VALGRIND], [test "x$enable_valgrind" = "xyes"])
+
 AM_PATH_PYTHON(3.5)
 
 AC_SUBST([AM_CFLAGS])

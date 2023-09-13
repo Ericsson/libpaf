@@ -124,12 +124,14 @@ pytest-run: testcert all
 	cd test && \
 	$(PYTEST) -v -s $(PYTESTS)
 
+if VALGRIND
 paftest-run-valgrind: testcert paftest
 	IN_VALGRIND=1 valgrind --tool=memcheck --leak-check=full -q \
 		--suppressions=test/libc.supp \
 		--suppressions=test/xcm.supp \
 		--suppressions=test/lttng.supp \
 		--num-callers=20 ./paftest -v -c $(TESTS)
+endif
 
 BASIC_TEST_TARGETS=verify-versions paftest-run
 
