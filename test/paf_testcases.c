@@ -944,9 +944,7 @@ static int test_detach(unsigned flags, size_t service_count)
 
     paf_detach(context);
 
-    wait_for(context, 0.25);
-
-    CHKINTEQ(paf_process(context), PAF_ERR_DETACHED);
+    CHKINTEQ(wait_for(context, 5), PAF_ERR_DETACHED);
 
     paf_close(context);
 
