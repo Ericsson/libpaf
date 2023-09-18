@@ -195,12 +195,15 @@ extern "C" {
  *
  * @section ttl Service TTL
  *
- * A service publish using @c libpaf has a time-to-live (TTL) of 30
+ * A service published using @c libpaf has a time-to-live (TTL) of 30
  * s. This default may be changed by setting the @c PAF_TTL
  * environment variable, before the paf_publish() call.
  *
  * The paf_set_ttl() function may be used to update the TTL for a
  * specific service.
+ *
+ * For a description of how service TTLs work in Pathfinder, please
+ * refer to the Pathfinder protocol specification.
  *
  * @section tracing Tracing
  *
