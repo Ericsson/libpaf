@@ -3,10 +3,13 @@
  * Copyright(c) 2023 Ericsson AB
  */
 
+ /* Certain versions of GNU readline require stdio.h to be included
+    prior to the inclusion of readline header files. */
+#include <stdio.h>
+
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/queue.h>
 
