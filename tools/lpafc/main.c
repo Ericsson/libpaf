@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     int64_t client_id = -1;
     int c;
 
-    while ((c = getopt (argc, argv, "i:h")) != -1)
+    while ((c = getopt(argc, argv, "i:h")) != -1)
     switch (c) {
     case 'i': {
 	if (ut_parse_uint63(optarg, 16, &client_id) < 0) {
@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
     }
 
-    int num_args = argc-optind;
+    int num_args = argc - optind;
 
     if (num_args != 1) {
 	usage(argv[0]);
