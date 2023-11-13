@@ -130,7 +130,8 @@ paftest-run-valgrind: testcert paftest
 		--suppressions=test/libc.supp \
 		--suppressions=test/xcm.supp \
 		--suppressions=test/lttng.supp \
-		--num-callers=20 ./paftest -v -c $(TESTS)
+		--num-callers=20 --error-exitcode=1 \
+		./paftest -v -c $(TESTS)
 endif
 
 BASIC_TEST_TARGETS=verify-versions paftest-run
