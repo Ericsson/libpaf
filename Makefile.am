@@ -130,7 +130,7 @@ paftest-run-valgrind: testcert paftest
 		--suppressions=test/libc.supp \
 		--suppressions=test/xcm.supp \
 		--suppressions=test/lttng.supp \
-		--num-callers=20 --error-exitcode=1 \
+		--num-callers=20 --error-exitcode=3 \
 		./paftest -v -c $(TESTS)
 endif
 
