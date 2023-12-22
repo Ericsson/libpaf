@@ -312,7 +312,7 @@ def run(cmd, exit_on_error=True):
 
     if res.returncode != 0:
         stdout.seek(0)
-        output += stdout.read().decode('utf-8')
+        output = stdout.read().decode('utf-8')
         sys.stderr.write(output)
 
         if exit_on_error:
