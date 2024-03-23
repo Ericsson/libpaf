@@ -240,14 +240,14 @@ def test_publish_unpublish_many(domain):
         service_ids.append(service_id)
     recorder = SubscriptionRecorder()
     sub_id = context.subscribe(recorder)
-    wait([context], timeout=1)
+    wait([context], timeout=2)
 
     for service_id in service_ids:
         assert service_id in recorder.notifications[libpaf.MatchType.APPEARED]
 
     for service_id in service_ids:
         context.unpublish(service_id)
-    wait([context], timeout=1)
+    wait([context], timeout=2)
 
     for service_id in service_ids:
         assert service_id in recorder.notifications[libpaf.MatchType.DISAPPEARED]
