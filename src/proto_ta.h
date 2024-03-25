@@ -11,15 +11,18 @@
 
 #include "msg.h"
 
-#define PROTO_VERSION INT64_C(2)
+#define PROTO_MIN_VERSION INT64_C(2)
+#define PROTO_MAX_VERSION INT64_C(3)
 
 #define PROTO_MSG_TYPE_REQUEST "request"
 #define PROTO_MSG_TYPE_ACCEPT "accept"
 #define PROTO_MSG_TYPE_NOTIFY "notify"
+#define PROTO_MSG_TYPE_INFORM "inform"
 #define PROTO_MSG_TYPE_COMPLETE "complete"
 #define PROTO_MSG_TYPE_FAIL "fail"
 
 #define PROTO_CMD_HELLO "hello"
+#define PROTO_CMD_TRACK "track"
 #define PROTO_CMD_SUBSCRIBE "subscribe"
 #define PROTO_CMD_UNSUBSCRIBE "unsubscribe"
 #define PROTO_CMD_SUBSCRIPTIONS "subscriptions"
@@ -39,6 +42,10 @@
 #define PROTO_FIELD_PROTO_MAX_VERSION "protocol-maximum-version"
 #define PROTO_FIELD_PROTO_VERSION "protocol-version"
 
+#define PROTO_FIELD_TRACK_TYPE "track-type"
+#define PROTO_TRACK_TYPE_QUERY "query"
+#define PROTO_TRACK_TYPE_REPLY "reply"
+
 #define PROTO_FIELD_SERVICE_ID "service-id"
 #define PROTO_FIELD_SERVICE_PROPS "service-props"
 
@@ -53,6 +60,9 @@
 #define PROTO_FIELD_CLIENT_ADDR "client-address"
 #define PROTO_FIELD_TIME "time"
 
+#define PROTO_FIELD_LATENCY "latency"
+#define PROTO_FIELD_IDLE "idle"
+
 #define PROTO_FIELD_MATCH_TYPE "match-type"
 
 #define PROTO_MATCH_TYPE_APPEARED "appeared"
@@ -60,6 +70,7 @@
 #define PROTO_MATCH_TYPE_DISAPPEARED "disappeared"
 
 #define PROTO_FAIL_REASON_NO_HELLO "no-hello"
+#define PROTO_FAIL_REASON_TRACK_EXISTS "track-exists"
 #define PROTO_FAIL_REASON_CLIENT_ID_EXISTS "client-id-exists"
 #define PROTO_FAIL_REASON_INVALID_FILTER_SYNTAX "invalid-filter-syntax"
 #define PROTO_FAIL_REASON_SUBSCRIPTION_ID_EXISTS "subscription-id-exists"
@@ -91,7 +102,8 @@ enum proto_field_type {
     proto_field_type_int64,
     proto_field_type_number,
     proto_field_type_props,
-    proto_field_type_match_type
+    proto_field_type_match_type,
+    proto_field_type_track_type
 };
 
 struct proto_field
@@ -102,7 +114,8 @@ struct proto_field
 
 enum proto_ia_type {
     proto_ia_type_single_response,
-    proto_ia_type_multi_response
+    proto_ia_type_multi_response,
+    proto_ia_type_two_way
 };
 
 #define MAX_FIELDS (16)
@@ -115,6 +128,8 @@ struct proto_ta_type
     struct proto_field opt_request_fields[MAX_FIELDS];
     struct proto_field notify_fields[MAX_FIELDS];
     struct proto_field opt_notify_fields[MAX_FIELDS];
+    struct proto_field inform_fields[MAX_FIELDS];
+    struct proto_field opt_inform_fields[MAX_FIELDS];
     struct proto_field complete_fields[MAX_FIELDS];
     struct proto_field opt_fail_fields[MAX_FIELDS];
 };
@@ -143,6 +158,9 @@ LIST_HEAD(proto_ta_list, proto_ta);
 struct proto_ta *proto_ta_hello(int64_t ta_id, const char *log_ref,
                                 proto_response_cb cb, void *user);
 
+struct proto_ta *proto_ta_track(int64_t ta_id, const char *log_ref,
+                                proto_response_cb cb, void *user);
+
 struct proto_ta *proto_ta_publish(int64_t ta_id, const char *log_ref,
                                   proto_response_cb cb, void *user);
 
@@ -164,10 +182,15 @@ struct proto_ta *proto_ta_services(int64_t ta_id, const char *log_ref,
 struct proto_ta *proto_ta_ping(int64_t ta_id, const char *log_ref,
 			       proto_response_cb cb, void *user);
 
-struct proto_ta *proto_ta_clients(int64_t ta_id, const char *log_ref,
-				  proto_response_cb cb, void *user);
+struct proto_ta *proto_ta_clients_v2(int64_t ta_id, const char *log_ref,
+				     proto_response_cb cb, void *user);
+
+struct proto_ta *proto_ta_clients_v3(int64_t ta_id, const char *log_ref,
+				     proto_response_cb cb, void *user);
 
 struct msg *proto_ta_produce_request(struct proto_ta *ta, ...);
+
+struct msg *proto_ta_produce_inform(struct proto_ta *ta, ...);
 
 int proto_ta_consume_response(struct proto_ta_list *ta_list,
                               struct msg *response, const char *log_ref);

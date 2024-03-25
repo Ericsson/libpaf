@@ -503,7 +503,9 @@ struct count_client_state
 };
 
 static void count_client_cb(int64_t client_id, const char *client_addr,
-			    int64_t connect_time, void *cb_data)
+			    int64_t connect_time, const double *idle,
+			    const int64_t *proto_version,
+			    const double *latency, void *cb_data)
 {
     struct count_client_state *state = cb_data;
 

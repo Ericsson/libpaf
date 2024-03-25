@@ -61,19 +61,30 @@ static const char *proto_ia_type_str(enum proto_ia_type type)
     switch (type) {
         SLABEL(proto_ia_type, single_response);
         SLABEL(proto_ia_type, multi_response);
+        SLABEL(proto_ia_type, two_way);
     default:
         return "undefined";
     }
 }
 
+static json_t *create_message(const char *cmd, int64_t ta_id,
+			      const char *msg_type)
+{
+    json_t *msg = json_object();
+    json_object_set_new(msg, PROTO_FIELD_TA_CMD, json_string(cmd));
+    json_object_set_new(msg, PROTO_FIELD_TA_ID, json_integer(ta_id));
+    json_object_set_new(msg, PROTO_FIELD_MSG_TYPE, json_string(msg_type));
+    return msg;
+}
+
 static json_t *create_request(const char *cmd, int64_t ta_id)
 {
-    json_t *request = json_object();
-    json_object_set_new(request, PROTO_FIELD_TA_CMD, json_string(cmd));
-    json_object_set_new(request, PROTO_FIELD_TA_ID, json_integer(ta_id));
-    json_object_set_new(request, PROTO_FIELD_MSG_TYPE,
-                        json_string(PROTO_MSG_TYPE_REQUEST));
-    return request;
+    return create_message(cmd, ta_id, PROTO_MSG_TYPE_REQUEST);
+}
+
+static json_t *create_inform(const char *cmd, int64_t ta_id)
+{
+    return create_message(cmd, ta_id, PROTO_MSG_TYPE_INFORM);
 }
 
 static const struct proto_ta_type hello_ta =
@@ -91,7 +102,21 @@ static const struct proto_ta_type hello_ta =
     .opt_fail_fields = {
         { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
     }
+};
 
+static const struct proto_ta_type track_ta =
+{
+    .cmd = PROTO_CMD_TRACK,
+    .ia_type = proto_ia_type_two_way,
+    .notify_fields = {
+        { PROTO_FIELD_TRACK_TYPE, proto_field_type_track_type }
+    },
+    .inform_fields = {
+        { PROTO_FIELD_TRACK_TYPE, proto_field_type_track_type }
+    },
+    .opt_fail_fields = {
+        { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
+    }
 };
 
 static const struct proto_ta_type publish_ta =
@@ -205,7 +230,7 @@ static const struct proto_ta_type ping_ta =
     }
 };
 
-static const struct proto_ta_type clients_ta =
+static const struct proto_ta_type clients_v2_ta =
 {
     .cmd = PROTO_CMD_CLIENTS,
     .ia_type = proto_ia_type_multi_response,
@@ -213,6 +238,25 @@ static const struct proto_ta_type clients_ta =
         { PROTO_FIELD_CLIENT_ID, proto_field_type_int64 },
         { PROTO_FIELD_CLIENT_ADDR, proto_field_type_str },
         { PROTO_FIELD_TIME, proto_field_type_int64 },
+    },
+    .opt_fail_fields = {
+        { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
+    }
+};
+
+static const struct proto_ta_type clients_v3_ta =
+{
+    .cmd = PROTO_CMD_CLIENTS,
+    .ia_type = proto_ia_type_multi_response,
+    .notify_fields = {
+        { PROTO_FIELD_CLIENT_ID, proto_field_type_int64 },
+        { PROTO_FIELD_CLIENT_ADDR, proto_field_type_str },
+        { PROTO_FIELD_TIME, proto_field_type_int64 },
+        { PROTO_FIELD_IDLE, proto_field_type_number },
+        { PROTO_FIELD_PROTO_VERSION, proto_field_type_int64 },
+    },
+    .opt_notify_fields = {
+        { PROTO_FIELD_LATENCY, proto_field_type_number }
     },
     .opt_fail_fields = {
         { PROTO_FIELD_FAIL_REASON, proto_field_type_str }
@@ -246,6 +290,7 @@ struct proto_ta *create_ta(const struct proto_ta_type *ta_type,
     
 
 GEN_PROTO_CREATE(hello)
+GEN_PROTO_CREATE(track)
 GEN_PROTO_CREATE(publish)
 GEN_PROTO_CREATE(unpublish)
 GEN_PROTO_CREATE(subscribe)
@@ -253,7 +298,8 @@ GEN_PROTO_CREATE(unsubscribe)
 GEN_PROTO_CREATE(subscriptions)
 GEN_PROTO_CREATE(services)
 GEN_PROTO_CREATE(ping)
-GEN_PROTO_CREATE(clients)
+GEN_PROTO_CREATE(clients_v2)
+GEN_PROTO_CREATE(clients_v3)
 
 static void prop_to_json(const char *prop_name,
                          const struct paf_value *prop_value, void *user)
@@ -311,6 +357,14 @@ static json_t *props_to_json(const struct paf_props *props)
 	    json_object_set_new(request, (field)->name, json_props);	\
 	    break;							\
 	}								\
+	case proto_field_type_track_type: {				\
+	    const bool *is_query = va_arg(ap, const bool *);		\
+	    const char *is_query_s =					\
+		*is_query ? PROTO_TRACK_TYPE_QUERY : PROTO_TRACK_TYPE_REPLY; \
+	    json_object_set_new(request, (field)->name,			\
+				json_string(is_query_s));		\
+	    break;							\
+	}								\
 	default:							\
 	    assert(0);							\
 	    break;							\
@@ -347,6 +401,33 @@ struct msg *proto_ta_produce_request(struct proto_ta *ta, ...)
     return msg_create_prealloc(data);
 }
 
+struct msg *proto_ta_produce_inform(struct proto_ta *ta, ...)
+{
+    assert (ta->state == proto_ta_state_accepted);
+
+    json_t *inform = create_inform(ta->type->cmd, ta->ta_id);
+
+    const struct proto_field *fields = ta->type->inform_fields;
+    const struct proto_field *opt_fields = ta->type->opt_inform_fields;
+
+    va_list ap;
+    va_start(ap, ta);
+
+    int i;
+    for (i = 0; fields != NULL && fields[i].name != NULL; i++)
+	SET_FIELD(inform, &fields[i], ap);
+
+    for (i = 0; opt_fields != NULL && opt_fields[i].name != NULL; i++)
+	SET_FIELD(inform, &opt_fields[i], ap);
+
+    va_end(ap);
+
+    char *data = json_dumps(inform, 0);
+
+    json_decref(inform);
+
+    return msg_create_prealloc(data);
+}
 
 static int get_field(json_t *msg, const char *name,
                      bool opt, const char *log_ref, json_t **value)
@@ -451,6 +532,7 @@ static void free_fields(const struct proto_field *fields,
         case proto_field_type_number:
         case proto_field_type_str:
         case proto_field_type_match_type:
+        case proto_field_type_track_type:
             ut_free(args[i]);
             break;
         case proto_field_type_props:
@@ -552,6 +634,29 @@ static int get_fields(json_t *response, const struct proto_field *fields,
 
             break;
         }
+        case proto_field_type_track_type: {
+            json_t *json_track_type;
+            int rc = get_string(response, fields[i].name, opt, log_ref,
+                                &json_track_type);
+            if (rc < 0)
+                goto err_free_args;
+            else if (json_track_type != NULL) {
+                const char *track_type_str = json_string_value(json_track_type);
+
+		bool is_query;
+                if (strcmp(track_type_str, PROTO_TRACK_TYPE_QUERY) == 0)
+                    is_query = true;
+                else if (strcmp(track_type_str, PROTO_TRACK_TYPE_REPLY) == 0)
+		    is_query = false;
+                else {
+                    log_ta_invalid_track_type(log_ref, track_type_str);
+                    goto err_free_args;
+                }
+                arg = ut_dup(&is_query, sizeof(bool));
+            }
+
+            break;
+        }
         default:
             assert(0);
             break;
@@ -579,7 +684,8 @@ static int ta_consume_response(struct proto_ta *ta,
 
     if (msg_type == proto_msg_type_accept &&
 	ta->state == proto_ta_state_requesting &&
-	ta->type->ia_type == proto_ia_type_multi_response) {
+	(ta->type->ia_type == proto_ia_type_multi_response ||
+	 ta->type->ia_type == proto_ia_type_two_way)) {
 	ta->state = proto_ta_state_accepted;
     } else if (msg_type == proto_msg_type_notify &&
 	       ta->state == proto_ta_state_accepted) {
@@ -589,7 +695,8 @@ static int ta_consume_response(struct proto_ta *ta,
 	       ((ta->state == proto_ta_state_requesting &&
 		 ta->type->ia_type == proto_ia_type_single_response) ||
 		(ta->state == proto_ta_state_accepted &&
-		 ta->type->ia_type == proto_ia_type_multi_response))) {
+		 (ta->type->ia_type == proto_ia_type_multi_response ||
+		  ta->type->ia_type == proto_ia_type_two_way)))) {
 	fields = ta->type->complete_fields;
 	ta->state = proto_ta_state_completed;
     } else if (msg_type == proto_msg_type_fail) {

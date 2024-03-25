@@ -230,12 +230,10 @@ TESTCASE_F(paf, publish_flaky_servers, REQUIRE_NO_LOCAL_PORT_BIND)
     return UTEST_SUCCESS;
 }
 
-#define MANY (1000)
+#define MANY (is_in_valgrind() ? 100 : 1000)
 
 TESTCASE(paf, publish_unpublish_many)
 {
-    //REQUIRE_NOT_IN_VALGRIND;
-
     struct paf_context *context = paf_attach(ts_domain_name);
 
     CHK(context != NULL);

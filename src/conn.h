@@ -20,6 +20,7 @@ struct conn *conn_connect(const struct server_conf *server_conf,
 void conn_close(struct conn *conn);
 
 int64_t conn_get_client_id(const struct conn *conn);
+int64_t conn_get_proto_version(const struct conn *conn);
 const char *conn_get_local_addr(const struct conn *conn);
 
 /* callback signature reused across multiple commands */
@@ -33,6 +34,15 @@ typedef void (*conn_hello_complete_cb )(int64_t ta_id, int64_t proto_version,
 int64_t conn_hello_nb(struct conn *conn, conn_fail_cb fail_cb,
 		      conn_hello_complete_cb complete_cb, void *cb_data);
 int conn_hello(struct conn *conn, int64_t *proto_version);
+
+/* track */
+typedef void (*conn_track_notify_cb)(int64_t ta_id, bool is_query,
+				     void *cb_data);
+int64_t conn_track_nb(struct conn *conn, conn_fail_cb fail_cb,
+		      conn_ta_cb accept_cb, conn_track_notify_cb notify_cb,
+		      conn_ta_cb complete_cb, void *cb_data);
+void conn_track_inform(struct conn *conn, int64_t ta_id, bool is_query);
+bool conn_is_track_supported(struct conn *conn);
 
 /* subscribe */
 typedef void (*conn_subscribe_notify_cb)(int64_t ta_id,
@@ -114,13 +124,19 @@ int conn_ping(struct conn *conn);
 typedef void (*conn_clients_notify_cb)(int64_t ta_id,
 				       int64_t client_id,
 				       const char *client_addr,
-				       int64_t connect_time, void *cb_data);
+				       int64_t connect_time,
+				       const double *idle,
+				       const int64_t *proto_version,
+				       const double *latency,
+				       void *cb_data);
 int64_t conn_clients_nb(struct conn *conn, conn_fail_cb fail_cb,
 			conn_ta_cb accept_cb, conn_clients_notify_cb notify_cb,
 			conn_ta_cb complete_cb, void *cb_data);
 
 typedef void (*conn_clients_cb)(int64_t client_id, const char *client_addr,
-				int64_t connect_time, void *cb_data);
+				int64_t connect_time, const double *idle,
+				const int64_t *proto_version,
+				const double *latency, void *cb_data);
 int conn_clients(struct conn *conn, conn_clients_cb cb, void *cb_data);
 
 int conn_process(struct conn *conn);

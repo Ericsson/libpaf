@@ -4,6 +4,7 @@
  */
 
 #include <assert.h>
+#include <float.h>
 #include <string.h>
 #include <time.h>
 #include <xcm_version.h>
@@ -65,6 +66,7 @@ static void set_state(struct link *link, enum link_state state)
 static void clear_tmos(struct link *link)
 {
     ptimer_cancel(link->timer, &link->reconnect_tmo);
+    ptimer_cancel(link->timer, &link->idle_tmo);
     ptimer_cancel(link->timer, &link->detached_tmo);
 }
 
@@ -112,6 +114,90 @@ static void try_finish_detach(struct link *link)
     ptimer_reschedule_rel(link->timer, 0, &link->detached_tmo);
 }
 
+static bool is_tracking(struct link *link)
+{
+    return link->track_ta_id >= 0;
+}
+
+static bool is_track_querying(struct link *link)
+{
+    return link->track_query_ts >= 0;
+}
+
+#define IDLE_QUERY_THRESHOLD 0.75
+
+static void schedule_idle_query_tmo(struct link *link)
+{
+    assert(is_tracking(link) && !is_track_querying(link));
+
+    double idle_query_time = link->max_idle_time * IDLE_QUERY_THRESHOLD;
+
+    ptimer_reschedule_rel(link->timer, idle_query_time, &link->idle_tmo);
+}
+
+static void schedule_idle_reply_tmo(struct link *link)
+{
+    assert(is_tracking(link) && is_track_querying(link));
+
+    double idle_reply_time =
+	link->max_idle_time * (1.0 - IDLE_QUERY_THRESHOLD);
+
+    ptimer_reschedule_rel(link->timer, idle_reply_time, &link->idle_tmo);
+}
+
+static void fail_cb(int64_t ta_id UT_UNUSED, int fail_reason_err UT_UNUSED,
+		    void *cb_data)
+{
+    struct link *link = cb_data;
+    handle_error(link);
+}
+
+static void track_notify_cb(int64_t ta_id, bool is_query, void *cb_data)
+{
+    struct link *link = cb_data;
+
+    if (is_query) {
+	log_link_track_replied(link);
+	conn_track_inform(link->conn, ta_id, false);
+
+	/* Delay idle query timeout */
+	if (!is_track_querying(link))
+	    schedule_idle_query_tmo(link);
+    } else {
+	if (!is_track_querying(link)) {
+	    log_link_track_unsolicited_reply(link);
+	    handle_error(link);
+	} else {
+	    double latency =
+		ut_ftime(CLOCK_MONOTONIC) - link->track_query_ts;
+	    log_link_track_reply(link, latency);
+	    link->track_query_ts = -1;
+	    schedule_idle_query_tmo(link);
+	}
+    }
+}
+
+static void track_complete_cb(int64_t ta_id UT_UNUSED, void *cb_data)
+{
+    struct link *link = cb_data;
+
+    log_link_track_completed(link);
+
+    link->track_ta_id = -1;
+    handle_error(link);
+}
+
+static void configure_idle_tracking(struct link *link)
+{
+    if (conn_is_track_supported(link->conn)) {
+	link->track_ta_id =
+	    conn_track_nb(link->conn, fail_cb, NULL, track_notify_cb,
+			  track_complete_cb, link);
+
+	schedule_idle_query_tmo(link);
+    }
+}
+
 /* XXX: 1. relay -> obj_relay
  *      2. only store active relays
  */
@@ -131,17 +217,12 @@ static void hello_complete_cb(int64_t ta_id UT_UNUSED, int64_t proto_version,
 
     link->reconnect_time = 0;
 
+    configure_idle_tracking(link);
+
     install_service_relays(link);
     install_sub_relays(link);
 
     link->listener = sd_add_listener(link->sd, sd_changed_cb, link);
-}
-
-static void fail_cb(int64_t ta_id UT_UNUSED, int fail_reason_err UT_UNUSED,
-		    void *cb_data)
-{
-    struct link *link = cb_data;
-    handle_error(link);
 }
 
 static void sync_service(struct link *link, struct relay *service_relay);
@@ -297,6 +378,7 @@ static void unsync_service(struct link *link, struct relay *service_relay)
 			    service_relay->unsync_ta_id);
 
     service_relay->state = relay_state_unsyncing;
+
 }
 
 static void sync_sub(struct link *link, struct relay *sub_relay)
@@ -331,6 +413,42 @@ static void unsync_sub(struct link *link, struct relay *sub_relay)
     sub_relay->state = relay_state_unsyncing;
 }
 
+static double lowest_service_ttl(struct link *link)
+{
+    double candidate = DBL_MAX;
+    struct service *service;
+    LIST_FOREACH(service, &link->sd->services, entry)
+	if (service->ttl < candidate)
+	    candidate = service->ttl;
+
+    return candidate;
+}
+
+static void adjust_max_idle_time(struct link *link)
+{
+    double max_idle_time;
+
+    if (LIST_EMPTY(&link->sd->services))
+	max_idle_time = conf_get_idle_max();
+    else {
+	max_idle_time = lowest_service_ttl(link);
+	max_idle_time = UT_MAX(max_idle_time, conf_get_idle_min());
+    }
+
+    if (max_idle_time != link->max_idle_time) {
+	log_link_idle_time_changed(link, max_idle_time);
+
+	if (is_tracking(link) && !is_track_querying(link)) {
+	    double left = ptimer_time_left(link->timer, link->idle_tmo);
+
+	    if (left > max_idle_time)
+		schedule_idle_query_tmo(link);
+	}
+
+	link->max_idle_time = max_idle_time;
+    }
+}
+
 static void install_service_relay(struct link *link, int64_t service_id)
 {
     assert(link->state == link_state_operational);
@@ -343,6 +461,8 @@ static void install_service_relay(struct link *link, int64_t service_id)
     LIST_INSERT_HEAD(&link->service_relays, service_relay, entry);
 
     sync_service(link, service_relay);
+
+    adjust_max_idle_time(link);
 }
 
 static void clear_service_relays(struct link *link)
@@ -378,6 +498,8 @@ static void update_service_relay(struct link *link, int64_t service_id)
     default:
 	assert(0);
     }
+
+    adjust_max_idle_time(link);
 }
 
 static void install_service_relays(struct link *link)
@@ -410,6 +532,8 @@ static void uninstall_service_relay(struct link *link, int64_t service_id)
     default:
 	assert(0);
     }
+
+    adjust_max_idle_time(link);
 }
 
 static void uninstall_service_relays(struct link *link)
@@ -496,6 +620,8 @@ static void service_changed(struct link *link, int64_t obj_id,
     default:
 	assert(0);
     }
+
+    adjust_max_idle_time(link);
 }
 
 static void sub_changed(struct link *link, int64_t obj_id,
@@ -553,6 +679,10 @@ struct link *link_create(int64_t link_id, int64_t client_id,
 	.sd = sd,
         .timer = timer,
 	.reconnect_tmo = -1,
+	.idle_tmo = -1,
+	.track_ta_id = -1,
+	.max_idle_time = conf_get_idle_max(),
+	.track_query_ts = -1,
 	.detached_tmo = -1,
 	.log_ref = link_log_ref
     };
@@ -648,6 +778,24 @@ static void restart(struct link *link)
     assure_reconnect_tmo(link);
 }
 
+static void check_idle(struct link *link)
+{
+    if (!is_tracking(link))
+	return;
+
+    if (!ptimer_has_expired(link->timer, link->idle_tmo))
+	return;
+
+    if (is_track_querying(link)) {
+	log_link_query_timeout(link);
+	handle_error(link);
+    } else {
+	conn_track_inform(link->conn, link->track_ta_id, true);
+	link->track_query_ts = ut_ftime(CLOCK_MONOTONIC);
+	schedule_idle_reply_tmo(link);
+    }
+}
+
 int link_process(struct link *link)
 {
     log_link_processing(link, link_state_str(link->state));
@@ -666,6 +814,9 @@ int link_process(struct link *link)
 	if (conn_process(link->conn) < 0)
 	    handle_error(link);
     }
+
+    if (link->state == link_state_operational)
+	check_idle(link);
 
     if (link->state == link_state_detaching)
         try_finish_detach(link);

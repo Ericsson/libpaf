@@ -41,6 +41,9 @@
 #define log_ta_invalid_match_type(log_ref, match_type_str)		\
     log_debug(log_ref, "Invalid match type \"%s\".", match_type_str)
 
+#define log_ta_invalid_track_type(log_ref, track_type_str)		\
+    log_debug(log_ref, "Invalid track type \"%s\".", track_type_str)
+
 #define log_ta_valid_ta(log_ref, ta_id, cmd, msg_type_str)		\
     log_debug(log_ref, "Found matching transaction id %"PRId64" for \"%s\" " \
               "response of type \"%s\".", ta_id, cmd, msg_type_str)

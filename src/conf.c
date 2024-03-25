@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "conf.h"
+#include "util.h"
 
 static const char *get_env_str(const char *env_name,
 			       const char *default_value)
@@ -74,6 +75,16 @@ double conf_get_reconnect_max(void)
     return get_double_env(RECONNECT_MAX_ENV, DEFAULT_RECONNECT_MAX);
 }
 
+double conf_get_idle_min(void)
+{
+    return UT_MAX(get_double_env(IDLE_MIN_ENV, DEFAULT_IDLE_MIN),
+		  HARD_MIN_IDLE_MIN);
+}
+
+double conf_get_idle_max(void)
+{
+    return get_double_env(IDLE_MAX_ENV, DEFAULT_IDLE_MAX);
+}
 
 int64_t conf_get_ttl(void)
 {

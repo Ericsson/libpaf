@@ -176,6 +176,36 @@ extern "C" {
  * by setting the @c PAF_RECONNECT_MIN and/or @c PAF_RECONNECT_MAX
  * environment variables.
  *
+ * @section liveness Liveness Tracking
+ *
+ * On connections where the Pathfinder protocol version 3 is
+ * negotiated to be used, @c libpaf performs server liveness tracking
+ * on the level of the Pathfinder protocol.
+ *
+ * On v3 connections, @c libpaf imposes an upper limit on how long
+ * time the remote peer is allowed to remain idle. When maximum idle
+ * time is approaching, libpaf will query the server to ensure it is
+ * still alive. In case the server also employs liveness checking, any
+ * server queries will be treated as a sign of life, and make libpaf
+ * post-poned any liveness query.
+ *
+ * The maximum idle time is 30 seconds by default, and may be
+ * overriden by setting the @c PAF_IDLE_MAX environment variable.
+ *
+ * The actual max idle time used may be lower than @c PAF_IDLE_MAX, in
+ * case low-TTL services have been published by the application, or
+ * have been matched in one of its subscriptions.
+ *
+ * The actual max idle time will never be set to lower than @c
+ * PAF_IDLE_MIN, which is 2 seconds by default. To protect the server,
+ * @c libpaf will treat @c PAF_IDLE_MIN set lower than 1 second as set
+ * to 1 second.
+ *
+ * On version 2 connections, libpaf depends on the transport protocol
+ * (e.g., TCP) for liveness checking.
+ *
+ * On version 3 connections, TCP keepalive is disabled.
+ *
  * @section multihoming DNS and Multihomed Servers
  *
  * The host part of the XCM server address in the @ref domain_conf may

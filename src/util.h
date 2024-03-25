@@ -82,6 +82,20 @@ int ut_net_ns_return(int old_ns_fd);
         }                                                               \
     }
 
+#define UT_MAX(a, b)				\
+    ({						\
+	typeof(a) _a = a;			\
+	typeof(b) _b = b;			\
+	_a > _b ? _a : _b;			\
+    })
+
+#define UT_MIN(a, b)				\
+    ({						\
+	typeof(a) _a = a;			\
+	typeof(b) _b = b;			\
+	_a < _b ? _a : _b;			\
+    })
+
 #define UT_ARRAY_LEN(ary) (sizeof(ary) / sizeof(ary[0]))
 
 #define UT_UNUSED __attribute__((unused))

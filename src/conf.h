@@ -24,6 +24,13 @@
 #define RECONNECT_MAX_ENV "PAF_RECONNECT_MAX"
 #define DEFAULT_RECONNECT_MAX (5) /* s */
 
+#define IDLE_MIN_ENV "PAF_IDLE_MIN"
+#define DEFAULT_IDLE_MIN (2) /* s */
+#define HARD_MIN_IDLE_MIN (1) /* s */
+
+#define IDLE_MAX_ENV "PAF_IDLE_MAX"
+#define DEFAULT_IDLE_MAX (30) /* s */
+
 #define TTL_ENV "PAF_TTL"
 #define DEFAULT_TTL (30) /* s */
 
@@ -32,8 +39,13 @@ bool conf_get_debug_enabled(void);
 const char *conf_get_domains_dir(void);
 
 double conf_get_rescan_period(void);
+
 double conf_get_reconnect_min(void);
 double conf_get_reconnect_max(void);
+
+double conf_get_idle_min(void);
+double conf_get_idle_max(void);
+
 int64_t conf_get_ttl(void);
 
 #endif

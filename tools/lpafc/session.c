@@ -20,6 +20,9 @@
 struct session
 {
     struct conn *conn;
+    int64_t track_ta_id;
+    bool track_accepted;
+    double track_query_ts;
     struct cli *cli;
 };
 
@@ -32,7 +35,7 @@ static void cmd_ok(void)
     printf("OK.\n");
 }
 
-static void cmd_failed(int reason)
+static void cmd_failed(int64_t reason)
 {
     printf("Protocol transaction failed: %s.\n", conn_err_str(reason));
 }
@@ -79,16 +82,96 @@ static void run_hello(const char *cmd, const char *const *args, size_t num,
     }
 }
 
-#define SUBSCRIBE_CMD "subscribe"
-#define SUBSCRIBE_CMD_HELP \
-    SUBSCRIBE_CMD " [<filter>]\n" \
-    "     Subscribe to changes in services (optionally only those " \
-    "matching a filter).\n"
+#define TRACK_CMD "track"
+#define TRACK_CMD_HELP							\
+    TRACK_CMD "\n"							\
+    "    Initiate track transaction.\n"					\
+    "\n"								\
+    "    The purpose of a track transaction is to allow the server and the\n" \
+    "    client to ensure that the remote peer is still alive.\n"	\
+    "\n"								\
+    "    The first use of this command initiates a track protocol transaction.\n" \
+    "\n"								\
+    "    Subsequently use of this command results in a track query being sent\n" \
+    "    to the server.\n"						\
+    "\n"								\
+    "    lpafc will reply to any track queries received from the server within\n" \
+    "    the track transaction, and notify the user that so has been done.\n" \
+    "\n"								\
+    "    This command is only available on protocol version 3 connections.\n" \
+    "    Redo protocol handshake.\n"
+
+static void track_notify_cb(int64_t ta_id, bool is_query, void *cb_data)
+{
+    if (is_query) {
+	conn_track_inform(session.conn, ta_id, false);
+	printf("Responded to track query notification.\n");
+    } else {
+	if (session.track_query_ts < 0) {
+	    printf("WARNING: Received unsolicited track query reply.");
+	} else {
+	    double latency =
+		ut_ftime(CLOCK_MONOTONIC) - session.track_query_ts;
+	    printf("Received reply to track query in %.1f ms.\n",
+		   (latency * 1e3));
+	    session.track_query_ts = -1;
+	}
+    }
+}
+
+static void track_accept_cb(int64_t ta_id, void *cb_data)
+{
+    session.track_accepted = true;
+}
+
+static void track_complete_cb(int64_t ta_id, void *cb_data)
+{
+    printf("Track transaction canceled.\n");
+
+    session.track_accepted = false;
+    session.track_ta_id = -1;
+    session.track_query_ts = -1;
+}
 
 static void fail_cb(int64_t ta_id, int fail_reason, void *cb_data)
 {
     printf("Operation failed: %s.\n", conn_err_str(fail_reason));
 }
+
+static void run_track(const char *cmd, const char *const *args, size_t num,
+		      void *cb_data)
+{
+    if (!conn_is_track_supported(session.conn)) {
+	printf("Not available in negotiated Pathfinder protocol version (%"
+	       PRId64").\n", conn_get_proto_version(session.conn));
+	return;
+    }
+
+    if (session.track_ta_id < 0) {
+	session.track_ta_id = conn_track_nb(session.conn, fail_cb,
+					    track_accept_cb, track_notify_cb,
+					    track_complete_cb, NULL);
+	if (session.track_ta_id < 0)
+	    cmd_failed(session.track_ta_id);
+	else
+	    cmd_ok();
+    } else if (session.track_accepted) {
+	if (session.track_query_ts < 0) {
+	    session.track_query_ts = ut_ftime(CLOCK_MONOTONIC);
+
+	    conn_track_inform(session.conn, session.track_ta_id, true);
+	    cmd_ok();
+	} else
+	    printf("Track query already in progress.\n");
+    } else
+	printf("Track request not yet accepted by server.\n");
+}
+
+#define SUBSCRIBE_CMD "subscribe"
+#define SUBSCRIBE_CMD_HELP \
+    SUBSCRIBE_CMD " [<filter>]\n" \
+    "     Subscribe to changes in services (optionally only those " \
+    "matching a filter).\n"
 
 #define SLABEL(prefix, name)                    \
     case prefix ## _ ## name:                   \
@@ -192,8 +275,10 @@ static void run_subscribe(const char *cmd, const char *const *args, size_t num,
 
     *sub_id = ut_rand_id();
 
-    int rc = conn_subscribe_nb(session.conn, *sub_id, filter, fail_cb,
-			       NULL, sub_notify_cb, sub_complete_cb, sub_id);
+    int64_t rc =
+	conn_subscribe_nb(session.conn, *sub_id, filter, fail_cb, NULL,
+			  sub_notify_cb, sub_complete_cb, sub_id);
+
     if (rc < 0) {
 	ut_free(sub_id);
 	cmd_failed(rc);
@@ -409,7 +494,9 @@ static void run_unpublish(const char *cmd, const char *const *args,
     "    List connected clients.\n"
 
 static void print_client(int64_t client_id, const char *client_addr,
-			 int64_t connect_time, void *cb_data)
+			 int64_t connect_time, const double *idle,
+			 const int64_t *proto_version, const double *latency,
+			 void *cb_data)
 {
     int total_secs = ut_ftime(CLOCK_REALTIME) - connect_time;
     int hours = total_secs / 3600;
@@ -419,13 +506,27 @@ static void print_client(int64_t client_id, const char *client_addr,
 
     snprintf(uptime_s, sizeof(uptime_s), "%d:%02d:%02d", hours, mins, secs);
 
-    printf("%-17"PRIx64"  %-17s %s\n", client_id, client_addr, uptime_s);
+    char idle_s[64] = "-";
+    char latency_s[64] = "-";
+    char proto_version_s[64] = "-";
+
+    if (idle != NULL)
+	snprintf(idle_s, sizeof(idle_s), "%.3f", *idle);
+    if (latency != NULL)
+	snprintf(latency_s, sizeof(latency_s), "%.1f", (*latency) * 1e3);
+    if (proto_version != NULL)
+	snprintf(proto_version_s, sizeof(proto_version), "%"PRId64,
+		 *proto_version);
+
+    printf("%-16"PRIx64" %-17s %-10s %-10s %-10s    %s\n", client_id,
+	   client_addr, uptime_s,idle_s, latency_s, proto_version_s);
 }
 
 static void run_clients(const char *cmd, const char *const *args, size_t num,
 			void *cb_data)
 {
-    printf("Client Id          Remote Address    Session Uptime\n");
+    printf("Client Id        Remote Address    Uptime     Idle [s]   "
+	   "Latency [ms]  Version\n");
 
     int rc = conn_clients(session.conn, print_client, NULL);
     if (rc < 0)
@@ -486,7 +587,9 @@ int session_init(int64_t client_id, const char *addr)
     }
 
     session = (struct session) {
-	.conn = conn
+	.conn = conn,
+	.track_ta_id = -1,
+	.track_query_ts = -1
     };
 
     cli_init(LPAFC_PROMPT);
@@ -494,6 +597,7 @@ int session_init(int64_t client_id, const char *addr)
     cli_register(QUIT_CMD, 0, 0, QUIT_CMD_HELP, run_quit, NULL);
     cli_register(ID_CMD, 0, 0, ID_CMD_HELP, run_id, NULL);
     cli_register(HELLO_CMD, 0, 0, HELLO_CMD_HELP, run_hello, NULL);
+    cli_register(TRACK_CMD, 0, 0, TRACK_CMD_HELP, run_track, NULL);
     cli_register(SUBSCRIBE_CMD, 0, 1, SUBSCRIBE_CMD_HELP, run_subscribe,
 		 NULL);
     cli_register(UNSUBSCRIBE_CMD, 1, 1, UNSUBSCRIBE_CMD_HELP, run_unsubscribe,

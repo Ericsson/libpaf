@@ -22,6 +22,13 @@
     log_conn_debug(conn, "Connection establishment failed; errno %d (%s).", \
 		   xcm_errno, strerror(xcm_errno))
 
+#define log_conn_failed_to_disable_tcp_keepalive(conn, xcm_errno)	\
+    log_conn_debug(conn, "Failed to disable TCP keepalive; errno %d (%s).", \
+		   xcm_errno, strerror(xcm_errno))
+
+#define log_conn_disabled_tcp_keepalive(conn, xcm_errno)	\
+    log_conn_debug(conn, "Disabled TCP keepalive.")
+
 #define log_conn_close(conn)				\
     log_conn_debug(conn, "Connection closed.");
 

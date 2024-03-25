@@ -80,6 +80,17 @@ struct hello_result
     int num_calls;
 };
 
+static bool is_valid_proto_version(int64_t proto_version)
+{
+    switch (proto_version) {
+    case 2:
+    case 3:
+	return true;
+    default:
+	return false;
+    }
+}
+
 static void hello_complete_cb(int64_t ta_id, int64_t proto_version,
 			      void *cb_data)
 {
@@ -128,7 +139,7 @@ TESTCASE(conn, hello_nb)
 
     CHKINTEQ(result.ta_id, hello_ta_id);
     CHKINTEQ(result.call_result, 0);
-    CHKINTEQ(result.proto_version, 2);
+    CHK(is_valid_proto_version(result.proto_version));
     CHKINTEQ(result.num_calls, 1);
 
     conn_close(conn);
@@ -147,9 +158,9 @@ TESTCASE(conn, hello_and_ping)
 
     struct conn *conn = conn_connect(&server_conf, client_id, NULL);
 
-    int64_t protocol_version = -1;
-    CHKNOERR(conn_hello(conn, &protocol_version));
-    CHKINTEQ(protocol_version, 2);
+    int64_t proto_version = -1;
+    CHKNOERR(conn_hello(conn, &proto_version));
+    CHK(is_valid_proto_version(proto_version));
 
     CHKNOERR(conn_ping(conn));
 
@@ -393,6 +404,9 @@ struct client {
     int64_t client_id;
     char client_addr[128];
     int64_t connect_time;
+    double idle;
+    int64_t proto_version;
+    double latency;
 };
 
 #define MAX_CLIENTS 16
@@ -404,7 +418,9 @@ struct clients_result
 };
 
 static void clients_cb(int64_t client_id, const char *client_addr,
-		       int64_t connect_time, void *cb_data)
+		       int64_t connect_time, const double *idle,
+		       const int64_t *proto_version, const double *latency,
+		       void *cb_data)
 {
     struct clients_result *result = cb_data;
     struct client *client = &result->clients[result->num_clients];
@@ -414,6 +430,9 @@ static void clients_cb(int64_t client_id, const char *client_addr,
     client->client_id = client_id;
     strcpy(client->client_addr, client_addr);
     client->connect_time = connect_time;
+    client->idle = idle != NULL ? *idle : -1;
+    client->proto_version = proto_version != NULL ? *proto_version : -1;
+    client->latency = latency != NULL ? *latency : -1;
 }
 
 TESTCASE(conn, clients)
@@ -422,7 +441,7 @@ TESTCASE(conn, clients)
     init_conf(&ts_servers[0], &server_conf);
 
     int64_t client_id0 = 0;
-    int64_t client_id1 = INT_MAX;
+    int64_t client_id1 = INT64_MAX;
 
     ts_start_servers();
 
@@ -460,6 +479,19 @@ TESTCASE(conn, clients)
 
     CHK(llabs(client0->connect_time - connect_time) < 2);
     CHK(llabs(client1->connect_time - connect_time) < 2);
+
+    if (conn_get_proto_version(conn0) >= 3) {
+	CHKINTEQ(client0->proto_version, conn_get_proto_version(conn0));
+	CHK(client0->idle >= 0 && client0->idle < 1);
+    }
+
+    if (conn_get_proto_version(conn1) >= 3) {
+	CHKINTEQ(client1->proto_version, conn_get_proto_version(conn1));
+	CHK(client1->idle >= 0 && client1->idle < 1);
+    }
+
+    CHK(client0->latency < 0);
+    CHK(client1->latency < 0);
 
     conn_close(conn0);
     conn_close(conn1);

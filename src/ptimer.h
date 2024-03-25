@@ -44,6 +44,7 @@ void ptimer_reschedule_rel(struct ptimer *timer, double rel_tmo,
 			   int64_t *tmo_id);
 
 bool ptimer_has_expired(struct ptimer *timer, int64_t tmo_id);
+double ptimer_time_left(struct ptimer *timer, int64_t tmo_id);
 void ptimer_cancel(struct ptimer *timer, int64_t *tmo_id);
 void ptimer_ack(struct ptimer *timer, int64_t *tmo_id);
 

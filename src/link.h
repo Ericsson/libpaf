@@ -71,6 +71,11 @@ struct link
 
     struct conn *conn;
 
+    int64_t idle_tmo;
+    int64_t track_ta_id;
+    double max_idle_time;
+    double track_query_ts;
+
     int64_t detached_tmo;
     double max_detach_time;
 

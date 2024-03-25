@@ -174,6 +174,21 @@ bool ptimer_has_expired(struct ptimer *timer, int64_t tmo_id)
     return now > tmo->expiry_time;
 }
 
+double ptimer_time_left(struct ptimer *timer, int64_t tmo_id)
+{
+    struct tmo *tmo = LIST_FIND(&timer->tmos, id, tmo_id, entry);
+
+    if (tmo == NULL)
+	return -1;
+
+    double now = ut_ftime(timer->clk_id);
+
+    if (now > tmo->expiry_time)
+	return 0;
+    else
+	return now - tmo->expiry_time;
+}
+
 static bool try_cancel(struct ptimer *timer, int64_t tmo_id)
 {
     struct tmo *tmo = LIST_FIND(&timer->tmos, id, tmo_id, entry);

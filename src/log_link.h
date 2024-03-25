@@ -17,8 +17,28 @@
 #define log_link_start(link)			\
     log_link_debug(link, "Link created.")
 
+#define log_link_query_timeout(link)			\
+    log_link_debug(link, "Server query timed out.")
+
+#define log_link_idle_time_changed(link, max_idle_time)			\
+    log_link_debug(link, "Maximum idle time was adjusted to %.0f s.",	\
+		   max_idle_time)
+
 #define log_link_restart(link)			\
     log_link_debug(link, "Link restarting.")
+
+#define log_link_track_reply(link, latency)				\
+    log_link_debug(link, "Received server track reply in %d ms.",	\
+		   (latency) * 1e3)
+
+#define log_link_track_unsolicited_reply(link)				\
+    log_link_debug(link, "Received unsolicited server track reply.")
+
+#define log_link_track_replied(link)		\
+    log_link_debug(link, "Replied to server track query.")
+
+#define log_link_track_completed(link)		\
+    log_link_debug(link, "Track transaction unexpectedly completed.")
 
 #define log_link_detaching(link)		\
     log_link_debug(link, "Detaching link.")

@@ -7,6 +7,7 @@
 #include <poll.h>
 #include <string.h>
 #include <xcm.h>
+#include <xcm_attr.h>
 #include <xcm_version.h>
 
 #include "list.h"
@@ -67,6 +68,7 @@ struct conn
     struct xcm_socket *sock;
 
     int64_t client_id;
+    int64_t proto_version;
 
     int64_t next_ta_id;
 
@@ -155,6 +157,7 @@ struct conn *conn_connect(const struct server_conf *server_conf,
 
     *conn = (struct conn) {
 	.client_id = client_id,
+	.proto_version = -1,
 	.log_ref = ut_strdup_non_null(log_ref)
     };
 
@@ -244,6 +247,11 @@ int64_t conn_get_client_id(const struct conn *conn)
     return conn->client_id;
 }
 
+int64_t conn_get_proto_version(const struct conn *conn)
+{
+    return conn->proto_version;
+}
+
 const char *conn_get_local_addr(const struct conn *conn)
 {
     return xcm_local_addr(conn->sock);
@@ -254,11 +262,11 @@ static int64_t get_next_ta_id(struct conn *conn)
     return conn->next_ta_id++;
 }
 
-static void queue_request(struct conn *conn, struct msg *request)
+static void out_queue_append(struct conn *conn, struct msg *msg)
 {
     bool was_empty = TAILQ_EMPTY(&conn->out_queue);
 
-    TAILQ_INSERT_TAIL(&conn->out_queue, request, entry);
+    TAILQ_INSERT_TAIL(&conn->out_queue, msg, entry);
 
     if (was_empty)
 	await(conn->sock, XCM_SO_SENDABLE|XCM_SO_RECEIVABLE);
@@ -338,6 +346,19 @@ static void std_mr_response(int64_t ta_id, enum proto_msg_type msg_type,
 	std_sr_response(ta_id, msg_type, optargs, conn, call);
 }
 
+static void disable_tcp_keepalive(struct conn *conn)
+{
+    UT_SAVE_ERRNO;
+    const char *addr = xcm_local_addr(conn->sock);
+    if (addr != NULL && is_tcp_based(addr)) {
+	if (xcm_attr_set_bool(conn->sock, "tcp.keepalive", false) < 0)
+	    log_conn_failed_to_disable_tcp_keepalive(conn, errno);
+	else
+	    log_conn_disabled_tcp_keepalive(conn, errno);
+    }
+    UT_RESTORE_ERRNO_DC;
+}
+
 static void hello_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
                               void **args, void **optargs,
 			      void *cb_data)
@@ -348,6 +369,12 @@ static void hello_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
     if (msg_type == proto_msg_type_complete) {
 	conn_hello_complete_cb cb = (conn_hello_complete_cb)call->complete_cb;
         const int64_t *proto_version = args[0];
+
+	conn->proto_version = *proto_version;
+
+	if (conn_is_track_supported(conn))
+	    disable_tcp_keepalive(conn);
+
 	cb(call->proto_ta->ta_id, *proto_version, call->cb_data);
 
 	end_call(call);
@@ -371,10 +398,10 @@ int64_t conn_hello_nb(struct conn *conn, conn_fail_cb fail_cb,
     LIST_INSERT_HEAD(&conn->transactions, hello_ta, entry);
 
     struct msg *hello_request =
-        proto_ta_produce_request(hello_ta, conn->client_id, PROTO_VERSION,
-				 PROTO_VERSION);
+        proto_ta_produce_request(hello_ta, conn->client_id, PROTO_MIN_VERSION,
+				 PROTO_MAX_VERSION);
 
-    queue_request(conn, hello_request);
+    out_queue_append(conn, hello_request);
 
     return ta_id;
 }
@@ -470,13 +497,67 @@ int conn_hello(struct conn *conn, int64_t *proto_version)
     return result.result.rc;
 }
 
+static void track_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
+			      void **args, void **optargs, void *cb_data)
+{
+    struct conn *conn = cb_data;
+    struct call *call = find_call(conn, ta_id);
+
+    if (msg_type == proto_msg_type_notify) {
+        const bool *is_query = args[0];
+
+	conn_track_notify_cb cb = (conn_track_notify_cb)call->notify_cb;
+
+	cb(call->proto_ta->ta_id, *is_query, call->cb_data);
+    } else
+	std_mr_response(ta_id, msg_type, optargs, conn, call);
+}
+
+int64_t conn_track_nb(struct conn *conn, conn_fail_cb fail_cb,
+		      conn_ta_cb accept_cb, conn_track_notify_cb notify_cb,
+		      conn_ta_cb complete_cb, void *cb_data)
+{
+    int64_t ta_id = get_next_ta_id(conn);
+
+    struct proto_ta *track_ta =
+	proto_ta_track(ta_id, conn->log_ref, track_response_cb, conn);
+
+    struct call *track_call =
+	call_mr_create(track_ta, (any_cb)fail_cb, (any_cb)accept_cb,
+		       (any_cb)notify_cb, (any_cb)complete_cb, cb_data);
+
+    LIST_INSERT_HEAD(&conn->calls, track_call, entry);
+    LIST_INSERT_HEAD(&conn->transactions, track_ta, entry);
+
+    struct msg *track_request = proto_ta_produce_request(track_ta);
+
+    out_queue_append(conn, track_request);
+
+    return ta_id;
+}
+
+void conn_track_inform(struct conn *conn, int64_t ta_id, bool is_query)
+{
+    struct call *call = find_call(conn, ta_id);
+
+    struct msg *track_inform =
+        proto_ta_produce_inform(call->proto_ta, &is_query);
+
+    out_queue_append(conn, track_inform);
+}
+
+bool conn_is_track_supported(struct conn *conn)
+{
+    return conn->proto_version >= 3;
+}
+
 static void subscribe_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
 				  void **args, void **optargs, void *cb_data)
 {
     struct conn *conn = cb_data;
     struct call *call = find_call(conn, ta_id);
 
-    if (msg_type ==  proto_msg_type_notify) {
+    if (msg_type == proto_msg_type_notify) {
         const enum paf_match_type *match_type = args[0];
         const int64_t *service_id = args[1];
 
@@ -515,7 +596,7 @@ int64_t conn_subscribe_nb(struct conn *conn, int64_t sub_id,
     struct msg *subscribe_request =
         proto_ta_produce_request(subscribe_ta, sub_id, filter);
 
-    queue_request(conn, subscribe_request);
+    out_queue_append(conn, subscribe_request);
 
     return ta_id;
 }
@@ -550,7 +631,7 @@ int64_t conn_unsubscribe_nb(struct conn *conn, int64_t sub_id,
     struct msg *unsubscribe_request =
         proto_ta_produce_request(unsubscribe_ta, sub_id);
 
-    queue_request(conn, unsubscribe_request);
+    out_queue_append(conn, unsubscribe_request);
 
     return ta_id;
 }
@@ -606,7 +687,7 @@ int64_t conn_subscriptions_nb(struct conn *conn, conn_fail_cb fail_cb,
     struct msg *subscriptions_request =
 	proto_ta_produce_request(subscriptions_ta);
 
-    queue_request(conn, subscriptions_request);
+    out_queue_append(conn, subscriptions_request);
 
     return ta_id;
 }
@@ -689,7 +770,7 @@ int64_t conn_services_nb(struct conn *conn, const char *filter,
     struct msg *services_request =
 	proto_ta_produce_request(services_ta, filter);
 
-    queue_request(conn, services_request);
+    out_queue_append(conn, services_request);
 
     return ta_id;
 }
@@ -761,7 +842,7 @@ int64_t conn_publish_nb(struct conn *conn, int64_t service_id,
         proto_ta_produce_request(publish_ta, service_id, generation, props,
 				 ttl);
 
-    queue_request(conn, publish_request);
+    out_queue_append(conn, publish_request);
 
     return ta_id;
 }
@@ -809,7 +890,7 @@ int64_t conn_unpublish_nb(struct conn *conn, int64_t service_id,
     struct msg *unpublish_request =
         proto_ta_produce_request(unpublish_ta, service_id);
 
-    queue_request(conn, unpublish_request);
+    out_queue_append(conn, unpublish_request);
 
     return ta_id;
 }
@@ -852,7 +933,7 @@ int64_t conn_ping_nb(struct conn *conn, conn_fail_cb fail_cb,
     struct msg *ping_request =
 	proto_ta_produce_request(ping_ta, conn->client_id);
 
-    queue_request(conn, ping_request);
+    out_queue_append(conn, ping_request);
 
     return ta_id;
 }
@@ -878,12 +959,21 @@ static void clients_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
         const int64_t *client_id = args[0];
 	const char *client_addr = args[1];
 	const int64_t *connect_time = args[2];
+	const double *idle = NULL;
+	const int64_t *proto_version = NULL;
+	const double *latency = NULL;
+
+	if (conn->proto_version >= 3) {
+	    idle = args[3];
+	    proto_version = args[4];
+	    latency = optargs[0];
+	}
 
 	conn_clients_notify_cb cb =
 	    (conn_clients_notify_cb)call->notify_cb;
 
 	cb(call->proto_ta->ta_id, *client_id, client_addr, *connect_time,
-	   call->cb_data);
+	   idle, proto_version, latency, call->cb_data);
     } else
 	std_mr_response(ta_id, msg_type, optargs, conn, call);
 }
@@ -893,6 +983,12 @@ int64_t conn_clients_nb(struct conn *conn, conn_fail_cb fail_cb,
 			conn_ta_cb complete_cb, void *cb_data)
 {
     int64_t ta_id = get_next_ta_id(conn);
+    struct proto_ta *(*proto_ta_clients)(int64_t, const char *,
+					 proto_response_cb, void *);
+    if (conn->proto_version < 3)
+	proto_ta_clients = proto_ta_clients_v2;
+    else
+	proto_ta_clients = proto_ta_clients_v3;
 
     struct proto_ta *clients_ta =
 	proto_ta_clients(ta_id, conn->log_ref, clients_response_cb, conn);
@@ -906,7 +1002,7 @@ int64_t conn_clients_nb(struct conn *conn, conn_fail_cb fail_cb,
 
     struct msg *clients_request = proto_ta_produce_request(clients_ta);
 
-    queue_request(conn, clients_request);
+    out_queue_append(conn, clients_request);
 
     return ta_id;
 }
@@ -921,11 +1017,15 @@ struct clients_result
 static void clients_notify_forward_cb(int64_t ta_id UT_UNUSED,
 				      int64_t client_id,
 				      const char *client_addr,
-				      int64_t connect_time, void *cb_data)
+				      int64_t connect_time,
+				      const double *idle,
+				      const int64_t *proto_version,
+				      const double *latency,
+				      void *cb_data)
 {
     struct clients_result *result = cb_data;
-    result->user_cb(client_id, client_addr, connect_time,
-		    result->user_cb_data);
+    result->user_cb(client_id, client_addr, connect_time, idle, proto_version,
+		    latency, result->user_cb_data);
 }
 
 int conn_clients(struct conn *conn, conn_clients_cb cb, void *cb_data)
