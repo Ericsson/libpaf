@@ -166,6 +166,9 @@ bool ptimer_has_expired(struct ptimer *timer, int64_t tmo_id)
 {
     struct tmo *tmo = LIST_FIND(&timer->tmos, id, tmo_id, entry);
 
+    if (tmo == NULL)
+	return false;
+
     double now = ut_ftime(timer->clk_id);
 
     return now > tmo->expiry_time;
