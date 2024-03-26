@@ -977,26 +977,36 @@ static int process_incoming(struct conn *conn)
     char* buf = ut_malloc(MSG_MAX);
 
     int rc;
-    while ((rc = xcm_receive(conn->sock, buf, MSG_MAX)) > 0) {
-	struct msg *response = msg_create_buf(buf, rc);
+    for (;;) {
+	int xcm_rc = xcm_receive(conn->sock, buf, MSG_MAX);
+
+	if (xcm_rc == 0) {
+	    log_conn_eof(conn);
+	    rc = -1;
+	    break;
+	} else if (xcm_rc < 0) {
+	    if (errno != EAGAIN) {
+		log_conn_receive_error(conn, errno);
+		rc = -1;
+	    } else
+		rc = 0;
+	    break;
+	}
+
+	struct msg *response = msg_create_buf(buf, xcm_rc);
 
 	log_conn_response(conn, response->data);
 
 	if (proto_ta_consume_response(&conn->transactions, response,
 				      conn->log_ref) < 0) {
-	    errno = EPROTO;
+	    rc = -1;
 	    break;
 	}
     }
 
-    if (rc == 0)
-	log_conn_eof(conn);
-    else if (rc < 0 && errno != EAGAIN)
-	log_conn_receive_error(conn, errno);
-
     ut_free(buf);
 
-    return errno == EAGAIN ? 0 : -1;
+    return rc;
 }
 
 int conn_process(struct conn *conn)
