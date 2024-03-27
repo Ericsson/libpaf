@@ -85,7 +85,7 @@ static void run_hello(const char *cmd, const char *const *args, size_t num,
 
 #define TRACK_CMD "track"
 #define TRACK_CMD_HELP							\
-    TRACK_CMD "\n"							\
+    TRACK_CMD " [query|verbose|quiet]\n"				\
     "    The purpose of a track transaction is to allow the server and the\n" \
     "    client to ensure that the remote peer is still alive.\n"	\
     "\n"								\
