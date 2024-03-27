@@ -23,6 +23,7 @@ struct session
     int64_t track_ta_id;
     bool track_accepted;
     double track_query_ts;
+    bool track_verbose;
     struct cli *cli;
 };
 
@@ -85,27 +86,30 @@ static void run_hello(const char *cmd, const char *const *args, size_t num,
 #define TRACK_CMD "track"
 #define TRACK_CMD_HELP							\
     TRACK_CMD "\n"							\
-    "    Initiate track transaction.\n"					\
-    "\n"								\
     "    The purpose of a track transaction is to allow the server and the\n" \
     "    client to ensure that the remote peer is still alive.\n"	\
     "\n"								\
-    "    The first use of this command initiates a track protocol transaction.\n" \
+    "    'track' without any arguments initiates a track protocol transaction.\n" \
     "\n"								\
-    "    Subsequently use of this command results in a track query being sent\n" \
-    "    to the server.\n"						\
+    "    'track query' results in a track query being sent to the server.\n" \
     "\n"								\
     "    lpafc will reply to any track queries received from the server within\n" \
-    "    the track transaction, and notify the user that so has been done.\n" \
+    "    the track transaction.\n" \
     "\n"								\
-    "    This command is only available on protocol version 3 connections.\n" \
-    "    Redo protocol handshake.\n"
+    "    'track verbose' results in server-initiated query to be logged to\n" \
+    "    the console.\n"						\
+    "\n"								\
+    "    'track quiet' results in server-initiated query to no longer be\n" \
+    "    logged the console. Quiet mode is the default.\n"		\
+    "\n"								\
+    "    This command is only available on protocol version 3 connections.\n"
 
 static void track_notify_cb(int64_t ta_id, bool is_query, void *cb_data)
 {
     if (is_query) {
 	conn_track_inform(session.conn, ta_id, false);
-	printf("Responded to track query notification.\n");
+	if (session.track_verbose)
+	    printf("Responded to track query notification.\n");
     } else {
 	if (session.track_query_ts < 0) {
 	    printf("WARNING: Received unsolicited track query reply.");
@@ -138,24 +142,20 @@ static void fail_cb(int64_t ta_id, int fail_reason, void *cb_data)
     printf("Operation failed: %s.\n", conn_err_str(fail_reason));
 }
 
-static void run_track(const char *cmd, const char *const *args, size_t num,
-		      void *cb_data)
+static void run_track_init(void)
 {
-    if (!conn_is_track_supported(session.conn)) {
-	printf("Not available in negotiated Pathfinder protocol version (%"
-	       PRId64").\n", conn_get_proto_version(session.conn));
-	return;
-    }
+    session.track_ta_id = conn_track_nb(session.conn, fail_cb,
+					track_accept_cb, track_notify_cb,
+					track_complete_cb, NULL);
+    if (session.track_ta_id < 0)
+	cmd_failed(session.track_ta_id);
+    else
+	cmd_ok();
+}
 
-    if (session.track_ta_id < 0) {
-	session.track_ta_id = conn_track_nb(session.conn, fail_cb,
-					    track_accept_cb, track_notify_cb,
-					    track_complete_cb, NULL);
-	if (session.track_ta_id < 0)
-	    cmd_failed(session.track_ta_id);
-	else
-	    cmd_ok();
-    } else if (session.track_accepted) {
+static void run_track_query(void)
+{
+    if (session.track_accepted) {
 	if (session.track_query_ts < 0) {
 	    session.track_query_ts = ut_ftime(CLOCK_MONOTONIC);
 
@@ -165,6 +165,35 @@ static void run_track(const char *cmd, const char *const *args, size_t num,
 	    printf("Track query already in progress.\n");
     } else
 	printf("Track request not yet accepted by server.\n");
+}
+
+static void run_track_set_verbose(bool on)
+{
+    session.track_verbose = on;
+    cmd_ok();
+}
+
+static void run_track(const char *cmd, const char *const *args, size_t num,
+		      void *cb_data)
+{
+    if (!conn_is_track_supported(session.conn)) {
+	printf("Not available in negotiated Pathfinder protocol version (%"
+	       PRId64").\n", conn_get_proto_version(session.conn));
+	return;
+    }
+
+    if (num == 0)
+	run_track_init();
+    else {
+	if (strcmp(args[0], "query") == 0)
+	    run_track_query();
+	else if (strcmp(args[0], "verbose") == 0)
+	    run_track_set_verbose(true);
+	else if (strcmp(args[0], "quiet") == 0)
+	    run_track_set_verbose(false);
+	else
+	    printf("Unknown track sub-command '%s'.\n", args[0]);
+    }
 }
 
 #define SUBSCRIBE_CMD "subscribe"
@@ -597,7 +626,7 @@ int session_init(int64_t client_id, const char *addr)
     cli_register(QUIT_CMD, 0, 0, QUIT_CMD_HELP, run_quit, NULL);
     cli_register(ID_CMD, 0, 0, ID_CMD_HELP, run_id, NULL);
     cli_register(HELLO_CMD, 0, 0, HELLO_CMD_HELP, run_hello, NULL);
-    cli_register(TRACK_CMD, 0, 0, TRACK_CMD_HELP, run_track, NULL);
+    cli_register(TRACK_CMD, 0, 1, TRACK_CMD_HELP, run_track, NULL);
     cli_register(SUBSCRIBE_CMD, 0, 1, SUBSCRIBE_CMD_HELP, run_subscribe,
 		 NULL);
     cli_register(UNSUBSCRIBE_CMD, 1, 1, UNSUBSCRIBE_CMD_HELP, run_unsubscribe,
