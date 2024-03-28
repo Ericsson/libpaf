@@ -29,7 +29,9 @@ bool server_conf_equals(const struct server_conf *server0,
 	str_equals(server0->cert_file, server1->cert_file) &&
 	str_equals(server0->key_file, server1->key_file) &&
 	str_equals(server0->tc_file, server1->tc_file) &&
-	str_equals(server0->crl_file, server1->crl_file);
+	str_equals(server0->crl_file, server1->crl_file) &&
+	server0->proto_version_min == server1->proto_version_min &&
+	server0->proto_version_max == server1->proto_version_max;
 }
 
 struct server_conf *server_conf_create(const char *net_ns,
@@ -38,7 +40,9 @@ struct server_conf *server_conf_create(const char *net_ns,
 				       const char *cert_file,
 				       const char *key_file,
 				       const char *tc_file,
-				       const char *crl_file)
+				       const char *crl_file,
+				       int proto_version_min,
+				       int proto_version_max)
 {
     struct server_conf *server = ut_malloc(sizeof(struct server_conf));
 
@@ -49,7 +53,9 @@ struct server_conf *server_conf_create(const char *net_ns,
 	.cert_file = dup_non_null(cert_file),
 	.key_file = dup_non_null(key_file),
 	.tc_file = dup_non_null(tc_file),
-	.crl_file = dup_non_null(crl_file)
+	.crl_file = dup_non_null(crl_file),
+	.proto_version_min = proto_version_min,
+	.proto_version_max = proto_version_max
     };
 
     return server;
@@ -76,6 +82,7 @@ struct server_conf *server_conf_clone(const struct server_conf *original)
     return server_conf_create(original->net_ns, original->addr,
 			      original->local_addr, original->cert_file,
 			      original->key_file, original->tc_file,
-			      original->crl_file);
+			      original->crl_file, original->proto_version_min,
+			      original->proto_version_max);
 }
 	

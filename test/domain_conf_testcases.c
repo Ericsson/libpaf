@@ -95,7 +95,9 @@ TESTCASE(domain_conf, json_read_file)
 		"{\n"
 		"  \"servers\": [\n"
 		"    {\n"
-		"      \"address\": \"%s\"\n"
+		"      \"address\": \"%s\",\n"
+		"      \"minProtocolVersion\": 2,\n"
+		"      \"maxProtocolVersion\": 99\n"
 		"    },\n"
 		"    {\n"
 		"      \"address\": \"%s\",\n"
@@ -122,6 +124,8 @@ TESTCASE(domain_conf, json_read_file)
     CHKNULL(conf->servers[0]->cert_file);
     CHKNULL(conf->servers[0]->key_file);
     CHKNULL(conf->servers[0]->tc_file);
+    CHKINTEQ(conf->servers[0]->proto_version_min, 2);
+    CHKINTEQ(conf->servers[0]->proto_version_max, 99);
 
     CHKSTREQ(conf->servers[1]->net_ns, net_ns);
     CHKSTREQ(conf->servers[1]->addr, addr1);
@@ -129,6 +133,8 @@ TESTCASE(domain_conf, json_read_file)
     CHKNULL(conf->servers[1]->cert_file);
     CHKNULL(conf->servers[1]->key_file);
     CHKNULL(conf->servers[1]->tc_file);
+    CHK(conf->servers[1]->proto_version_min < 0);
+    CHK(conf->servers[1]->proto_version_max < 0);
 
     CHKNULL(conf->servers[2]->net_ns);
     CHKSTREQ(conf->servers[2]->addr, addr2);
@@ -136,6 +142,8 @@ TESTCASE(domain_conf, json_read_file)
     CHKSTREQ(conf->servers[2]->cert_file, cert_file);
     CHKSTREQ(conf->servers[2]->key_file, key_file);
     CHKSTREQ(conf->servers[2]->tc_file, tc_file);
+    CHK(conf->servers[2]->proto_version_min < 0);
+    CHK(conf->servers[2]->proto_version_max < 0);
 
     domain_conf_destroy(conf);
 

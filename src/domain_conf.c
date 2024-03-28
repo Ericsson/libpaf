@@ -46,7 +46,8 @@ static int add_server(struct domain_conf *conf, const char *filename,
 		      const char *net_ns, const char *addr,
 		      const char *local_addr, const char *cert_file,
 		      const char *key_file, const char *tc_file,
-		      const char *crl_file, const char *log_ref)
+		      const char *crl_file, int proto_version_min,
+		      int proto_version_max, const char *log_ref)
 {
     char proto[64];
 
@@ -66,7 +67,8 @@ static int add_server(struct domain_conf *conf, const char *filename,
 
     conf->servers[conf->num_servers] =
 	server_conf_create(net_ns, addr, local_addr, cert_file, key_file,
-			   tc_file, crl_file);
+			   tc_file, crl_file, proto_version_min,
+			   proto_version_max);
 
     conf->num_servers = new_num_servers;
 
@@ -92,7 +94,7 @@ static struct domain_conf *custom_to_conf(const char *filename,
 
 	if (strlen(start) > 0 && !ut_str_begins_with(start, COMMENT_CHAR)
 	    && add_server(conf, filename, NULL, start, NULL, NULL, NULL, NULL,
-			  NULL, log_ref) < 0) {
+			  NULL, -1, -1, log_ref) < 0) {
 	    domain_conf_destroy(conf);
 	    return NULL;
 	}
@@ -103,18 +105,70 @@ static struct domain_conf *custom_to_conf(const char *filename,
     return conf;
 }
 
-static const char *get_server_key(const char *filename, json_t* server,
-				  const char *name, bool mandantory,
-				  const char *log_ref)
+static int get_server_field(const char *filename, json_t* server,
+			    const char *name, bool mandantory,
+			    json_t **value, const char *log_ref)
 {
-    json_t *obj = json_object_get(server, name);
+    *value = json_object_get(server, name);
 
-    if ((obj == NULL && mandantory) || (obj != NULL && !json_is_string(obj))) {
+    if (*value == NULL && mandantory) {
 	log_domain_conf_missing_server_field(log_ref, filename, name);
-	return NULL;
+	return -1;
     }
 
-    return json_string_value(obj);
+    return 0;
+}
+
+static int get_server_str_field(const char *filename, json_t* server,
+				const char *name, bool mandantory,
+				const char *default_value, const char **value,
+				const char *log_ref)
+{
+    json_t *obj;
+    if (get_server_field(filename, server, name, mandantory, &obj,
+			 log_ref) < 0)
+	return -1;
+
+    if (obj == NULL) {
+	*value = default_value;
+	return 0;
+    }
+
+    if (!json_is_string(obj)) {
+	    log_domain_conf_server_field_wrong_type(log_ref, filename, name,
+						    "string");
+	    return -1;
+    }
+
+    *value = json_string_value(obj);
+
+    return 0;
+}
+
+static int get_server_int64_field(const char *filename, json_t* server,
+				  const char *name, bool mandantory,
+				  int64_t default_value, int64_t *value,
+				  const char *log_ref)
+{
+    json_t *obj;
+    if (get_server_field(filename, server, name, mandantory, &obj,
+			 log_ref) < 0)
+	return -1;
+
+    if (obj == NULL) {
+	*value = default_value;
+	return 0;
+    }
+
+    if (!json_is_integer(obj)) {
+	    log_domain_conf_server_field_wrong_type(log_ref, filename, name,
+						    "integer");
+	    return -1;
+    }
+
+    *value = json_integer_value(obj);
+
+    return 0;
 }
 
 static bool is_tls_addr(const char *addr)
@@ -158,29 +212,42 @@ static struct domain_conf *json_to_conf(const char *filename,
 	    goto err_free_conf;
 	}
 
-	const char *net_ns =
-	    get_server_key(filename, server, "networkNamespace", false,
-			   log_ref);
+	const char *net_ns;
+	const char *addr;
+	const char *local_addr;
+	const char *cert_file;
+	const char *key_file;
+	const char *tc_file;
+	const char *crl_file;
+	int64_t proto_version_min;
+	int64_t proto_version_max;
 
-	const char *addr =
-	    get_server_key(filename, server, "address", true, log_ref);
-	if (addr == NULL)
+	if (get_server_str_field(filename, server, "networkNamespace", false,
+				 NULL, &net_ns, log_ref) < 0)
+	    goto err_free_conf;
+	if (get_server_str_field(filename, server, "address", true, NULL,
+				 &addr, log_ref) < 0)
 	    goto err_free_conf;
 
-	const char *local_addr =
-	    get_server_key(filename, server, "localAddress", false, log_ref);
+	if (get_server_str_field(filename, server, "localAddress", false,
+				 NULL, &local_addr, log_ref) < 0)
+	    goto err_free_conf;
 
-	const char *cert_file =
-	    get_server_key(filename, server, "tlsCertificateFile", false,
-			   log_ref);
-	const char *key_file =
-	    get_server_key(filename, server, "tlsKeyFile", false,
-			   log_ref);
-	const char *tc_file =
-	    get_server_key(filename, server, "tlsTrustedCaFile", false,
-			   log_ref);
-	const char *crl_file =
-	    get_server_key(filename, server, "tlsCrlFile", false, log_ref);
+	if (get_server_str_field(filename, server, "tlsCertificateFile", false,
+				 NULL, &cert_file, log_ref) < 0)
+	    goto err_free_conf;
+
+	if (get_server_str_field(filename, server, "tlsKeyFile", false, NULL,
+				 &key_file, log_ref) < 0)
+	    goto err_free_conf;
+
+	if (get_server_str_field(filename, server, "tlsTrustedCaFile", false,
+				 NULL, &tc_file, log_ref) < 0)
+	    goto err_free_conf;
+
+	if (get_server_str_field(filename, server, "tlsCrlFile", false,
+				 NULL, &crl_file, log_ref) < 0)
+	    goto err_free_conf;
 
 	if (!is_tls_addr(addr) && (cert_file != NULL || key_file != NULL ||
 				   tc_file != NULL || crl_file != NULL)) {
@@ -188,8 +255,26 @@ static struct domain_conf *json_to_conf(const char *filename,
 	    goto err_free_conf;
 	}
 
+	if (get_server_int64_field(filename, server, "minProtocolVersion",
+				   false, -1, &proto_version_min,
+				   log_ref) < 0)
+	    goto err_free_conf;
+
+	if (get_server_int64_field(filename, server, "maxProtocolVersion",
+				   false, -1, &proto_version_max,
+				   log_ref) < 0)
+	    goto err_free_conf;
+
+	if (proto_version_min > proto_version_max) {
+	    log_domain_conf_min_version_larger_than_max(log_ref,
+							proto_version_min,
+							proto_version_max);
+	    goto err_free_conf;
+	}
+
 	if (add_server(conf, filename, net_ns, addr, local_addr, cert_file,
-		       key_file, tc_file, crl_file, log_ref) < 0)
+		       key_file, tc_file, crl_file, proto_version_min,
+		       proto_version_max, log_ref) < 0)
 	    goto err_free_conf;
     }
 

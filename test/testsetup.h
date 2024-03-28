@@ -77,8 +77,9 @@ int ts_write_nl_domains_file(const char *filename, struct server *servers,
 			     size_t num_servers);
 int ts_write_json_domain_file(const char *filename, const char *cert_file,
 			      const char *key_file, const char *tc_file,
-			      const char *crl_file, struct server *servers,
-			      size_t num_servers);
+			      const char *crl_file, int64_t proto_version_min,
+			      int64_t proto_version_max,
+			      struct server *servers, size_t num_servers);
 
 int ts_domain_setup(unsigned int flags);
 void ts_domain_teardown(void);

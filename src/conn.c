@@ -67,6 +67,9 @@ struct conn
 {
     struct xcm_socket *sock;
 
+    int64_t proto_version_min;
+    int64_t proto_version_max;
+
     int64_t client_id;
     int64_t proto_version;
 
@@ -148,6 +151,35 @@ static void await(struct xcm_socket *conn, int condition)
     assert(rc >= 0);
 }
 
+static int set_proto_range(struct conn* conn, int64_t configured_min,
+			   int64_t configured_max)
+{
+    if (configured_min >= 0) {
+	if (configured_min > PROTO_MAX_VERSION) {
+	    log_conn_proto_min_version_too_large(conn, configured_min,
+						 PROTO_MAX_VERSION);
+	    return -1;
+	}
+	conn->proto_version_min = UT_MAX(PROTO_MIN_VERSION, configured_min);
+    } else
+	conn->proto_version_min = PROTO_MIN_VERSION;
+
+    if (configured_max >= 0) {
+	if (configured_max < PROTO_MIN_VERSION) {
+	    log_conn_proto_max_version_too_small(conn, configured_max,
+						 PROTO_MIN_VERSION);
+	    return -1;
+	}
+	conn->proto_version_max = UT_MIN(PROTO_MAX_VERSION, configured_max);
+    } else
+	conn->proto_version_max = PROTO_MAX_VERSION;
+
+    log_conn_proto_version_range(conn, conn->proto_version_min,
+				 conn->proto_version_max);
+
+    return 0;
+}
+
 struct conn *conn_connect(const struct server_conf *server_conf,
 			  int64_t client_id, const char *log_ref)
 {
@@ -166,6 +198,10 @@ struct conn *conn_connect(const struct server_conf *server_conf,
     TAILQ_INIT(&conn->out_queue);
 
     log_conn_connect(conn, server_conf->addr);
+
+    if (set_proto_range(conn, server_conf->proto_version_min,
+			server_conf->proto_version_max) < 0)
+	goto err_free;
 
     int old_ns_fd = -1;
 
@@ -206,7 +242,10 @@ err_switch_back:
     if (old_ns_fd >= 0)
 	ut_net_ns_return(old_ns_fd);
 err_close:
-    conn_close(conn);
+    xcm_close(conn->sock);
+err_free:
+    ut_free(conn->log_ref);
+    ut_free(conn);
 
     return NULL;
 }
@@ -398,8 +437,9 @@ int64_t conn_hello_nb(struct conn *conn, conn_fail_cb fail_cb,
     LIST_INSERT_HEAD(&conn->transactions, hello_ta, entry);
 
     struct msg *hello_request =
-        proto_ta_produce_request(hello_ta, conn->client_id, PROTO_MIN_VERSION,
-				 PROTO_MAX_VERSION);
+        proto_ta_produce_request(hello_ta, conn->client_id,
+				 conn->proto_version_min,
+				 conn->proto_version_max);
 
     out_queue_append(conn, hello_request);
 

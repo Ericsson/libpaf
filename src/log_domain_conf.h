@@ -59,6 +59,11 @@
     log_domain_conf_parse_error(domain, filename, "server object "	\
 				"is missing field \"%s\"", name)
 
+#define log_domain_conf_server_field_wrong_type(domain, filename,	\
+						name, type)		\
+    log_domain_conf_parse_error(domain, filename, "server field \"%s\" " \
+				"is not a %s", name, type)
+
 #define log_domain_conf_repeated_addr(domain, filename, addr)		\
     log_domain_conf_error(domain, "Domain file \"%s\" contains repeated " \
 			  "server address \"%s\".", filename, addr)
@@ -77,5 +82,9 @@
 			  "occurrences in domain file \"%s\".", addr,	\
 			  filename)
 
+#define log_domain_conf_min_version_larger_than_max(domain, min, max)	\
+    log_domain_conf_error(domain, "Minimum protocol version (%"PRId64	\
+			  ") is set lower than maximum (%"PRId64 ").",	\
+			  min, max);
 
 #endif

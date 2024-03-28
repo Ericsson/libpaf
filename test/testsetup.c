@@ -257,7 +257,9 @@ int ts_write_nl_domains_file(const char *filename, struct server *servers,
 
 int ts_write_json_domain_file(const char *filename, const char *cert_file,
 			      const char *key_file, const char *tc_file,
-			      const char *crl_file, struct server *servers,
+			      const char *crl_file, int64_t proto_version_min,
+			      int64_t proto_version_max,
+			      struct server *servers,
 			      size_t num_servers)
 {
     FILE *domains_file = fopen(filename, "w");
@@ -297,6 +299,16 @@ int ts_write_json_domain_file(const char *filename, const char *cert_file,
 	if (ts_is_tls(server->addr) && crl_file != NULL)
 	    fprintf(domains_file, ",\n"
 		    "      \"tlsCrlFile\": \"%s\"", crl_file);
+
+	if (proto_version_min >= 0)
+	    fprintf(domains_file, ",\n"
+		    "      \"minProtocolVersion\": %"PRId64,
+		    proto_version_min);
+
+	if (proto_version_max >= 0)
+	    fprintf(domains_file, ",\n"
+		    "      \"maxProtocolVersion\": %"PRId64,
+		    proto_version_max);
 
 	fprintf(domains_file, "\n"
 		"    }");
@@ -394,11 +406,13 @@ int ts_domain_setup(unsigned int setup_flags)
 	if (tls_conf) {
 	    if (ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 					  TS_CLIENT_KEY, TS_CLIENT_TC,
-					  NULL, ts_servers, TS_NUM_SERVERS) < 0)
+					  NULL, -1, -1, ts_servers,
+					  TS_NUM_SERVERS) < 0)
 		return -1;
 	} else {
-	    if (ts_write_json_domain_file(ts_domains_filename, NULL, NULL, NULL,
-					  NULL, ts_servers, TS_NUM_SERVERS) < 0)
+	    if (ts_write_json_domain_file(ts_domains_filename, NULL, NULL,
+					  NULL, NULL, -1, -1, ts_servers,
+					  TS_NUM_SERVERS) < 0)
 		return -1;
 	}
     }
@@ -435,7 +449,9 @@ static struct conn *server_connect(const struct server *server)
 {
     struct server_conf server_conf = {
 	.net_ns = server->net_ns,
-	.addr = server->addr
+	.addr = server->addr,
+	.proto_version_min = -1,
+	.proto_version_max = -1
     };
 
     int64_t client_id = ut_rand_id();

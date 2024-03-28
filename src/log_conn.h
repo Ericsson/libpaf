@@ -18,6 +18,22 @@
     log_conn_debug(conn, "Connection establishment initiated toward " \
 		   "\"%s\".", addr)
 
+#define log_conn_proto_min_version_too_large(conn, configured_min,	\
+					     supported_max)		\
+    log_conn_debug(conn, "Configured minimum protocol version (%"PRId64") " \
+		   "is larger than maximum supported (%"PRId64").", \
+		   configured_min, supported_max)
+
+#define log_conn_proto_max_version_too_small(conn, configured_max,	\
+					     supported_min)		\
+    log_conn_debug(conn, "Configured maximum protocol version (%"PRId64") " \
+		   "is smaller than minimum supported (%"PRId64").", \
+		   configured_max, supported_min)
+
+#define log_conn_proto_version_range(conn, min, max) \
+    log_conn_debug(conn, "Connection protocol version range is %"PRId64 \
+		   "-%"PRId64".", min, max)
+
 #define log_conn_connect_failed(conn, xcm_errno)			\
     log_conn_debug(conn, "Connection establishment failed; errno %d (%s).", \
 		   xcm_errno, strerror(xcm_errno))
@@ -30,7 +46,7 @@
     log_conn_debug(conn, "Disabled TCP keepalive.")
 
 #define log_conn_close(conn)				\
-    log_conn_debug(conn, "Connection closed.");
+    log_conn_debug(conn, "Connection closed.")
 
 #define log_conn_request(conn, request_str)			\
     log_conn_debug(conn, "Outgoing request: %s.", request_str)

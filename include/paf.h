@@ -96,6 +96,22 @@ extern "C" {
  * XCM-formatted address will be bound to before establishing an
  * outgoing connection.
  *
+ * A server object may have a key "minProtocolVersion", used to
+ * increase the minimum protocol version advertised as supported by @c
+ * libpaf to that server. If "minProtocolVersion" is set higher than
+ * the maximum version suported by @c libpaf (i.e., > 3), no
+ * connections will be initiated to that server.
+ *
+ * A server object may have the key "maxProtocolVersion", used to
+ * decrease the maximum protocol version advertised by @c libpaf. If
+ * the "maxProtocolVersion" is set lower than the minimum version
+ * supported by @c libpaf (i.e., < 2), no connections will be
+ * initiated to that server.
+ *
+ * If both "minProtocolVersion" and "maxProtocolVersion" are set,
+ * "minProtocolVersion" must be equal to or lower than
+ * "maxProtocolVersion".
+ *
  * A server object may include a key "networkNamespace". If present,
  * the library will make sure the outoing transport layer connection
  * originates from a Linux network namespace named per the key's
@@ -130,6 +146,7 @@ extern "C" {
  *     },
  *     {
  *       "address": "tls:5.6.7.8:8888",
+ *       "minProtocolVersion": 3,
  *       "localAddress": "tls:9.9.9.9:0"
  *     },
  *     {
@@ -138,6 +155,7 @@ extern "C" {
  *     },
  *     {
  *       "address": "ux:foo"
+ *       "maxProtocolVersion": 2,
  *     }
  *   ]
  * }

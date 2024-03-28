@@ -47,10 +47,12 @@ static void init_conf(const struct server *server, struct server_conf *conf)
 {
     *conf = (struct server_conf) {
 	.net_ns = server->net_ns,
-	.addr = server->addr
+	.addr = server->addr,
+	.proto_version_min = -1,
+	.proto_version_max = -1
     };
 }
-    
+
 TESTCASE(conn, connect)
 {
     struct server_conf server_conf;
@@ -515,6 +517,25 @@ TESTCASE(conn, no_hello)
     CHKINTEQ(conn_clients(conn, clients_cb, &result), CONN_ERR_NO_HELLO);
 
     conn_close(conn);
+
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(conn, no_version_overlap)
+{
+    ts_start_servers();
+
+    struct server_conf server_conf;
+    init_conf(&ts_servers[0], &server_conf);
+
+    server_conf.proto_version_min = 100;
+
+    CHK(conn_connect(&server_conf, 42, NULL) == NULL);
+
+    server_conf.proto_version_min = 1;
+    server_conf.proto_version_max = 1;
+
+    CHK(conn_connect(&server_conf, 42, NULL) == NULL);
 
     return UTEST_SUCCESS;
 }

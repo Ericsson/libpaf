@@ -445,8 +445,7 @@ bg_publisher(const char *domain_name,
         return pid;
 }
 
-/* See 'match_with_most_servers_down' on why this flag is needed. */
-TESTCASE_F(paf, subscribe_flaky_server, REQUIRE_NO_LOCAL_PORT_BIND)
+static int run_subscribe_flaky_server(bool force_v2)
 {
     struct paf_context *context = paf_attach(ts_domain_name);
 
@@ -497,8 +496,27 @@ TESTCASE_F(paf, subscribe_flaky_server, REQUIRE_NO_LOCAL_PORT_BIND)
     return UTEST_SUCCESS;
 }
 
-TESTCASE(paf, subscription_match)
+/* See 'match_with_most_servers_down' on why this flag is needed. */
+TESTCASE_F(paf, subscribe_flaky_server, REQUIRE_NO_LOCAL_PORT_BIND)
 {
+    return run_subscribe_flaky_server(false);
+}
+
+/* See 'match_with_most_servers_down' on why this flag is needed. */
+TESTCASE_F(paf, subscribe_flaky_server_v2, REQUIRE_NO_LOCAL_PORT_BIND)
+{
+    return run_subscribe_flaky_server(true);
+}
+
+static int run_subscription_match(bool force_v2)
+{
+    if (force_v2)
+	CHKNOERR(ts_write_json_domain_file(ts_domains_filename,
+					   TS_CLIENT_CERT,
+					   TS_CLIENT_KEY, TS_CLIENT_TC,
+					   NULL, 2, 2, ts_servers,
+					   TS_NUM_SERVERS));
+
     struct paf_context *context = paf_attach(ts_domain_name);
 
     const char *filter_s = "(|(name=foo)(name=bar))";
@@ -528,6 +546,16 @@ TESTCASE(paf, subscription_match)
     CHKNOERR(ts_stop_servers());
 
     return UTEST_SUCCESS;
+}
+
+TESTCASE(paf, subscription_match)
+{
+    return run_subscription_match(false);
+}
+
+TESTCASE(paf, subscription_match_v2)
+{
+    return run_subscription_match(true);
 }
 
 /* The scenario tested here does not work reliably when the libpaf
@@ -1107,7 +1135,7 @@ TESTCASE(paf, change_domain_tls_conf)
 				       TS_UNTRUSTED_CLIENT_CERT,
 				       TS_UNTRUSTED_CLIENT_KEY,
 				       TS_UNTRUSTED_CLIENT_TC, NULL,
-				       &server, 1));
+				       -1, -1, &server, 1));
 
     struct paf_context *context = paf_attach(ts_domain_name);
 
@@ -1124,7 +1152,7 @@ TESTCASE(paf, change_domain_tls_conf)
 
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 				       TS_CLIENT_KEY, TS_CLIENT_TC, NULL,
-				       &server, 1));
+				       -1, -1, &server, 1));
 
     CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
 
@@ -1158,7 +1186,7 @@ static int run_certificate_revocation(bool after_rescan)
     if (after_rescan) {
 	CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 					   TS_CLIENT_KEY, TS_CLIENT_TC,
-					   TS_EMPTY_CRL, &server, 1));
+					   TS_EMPTY_CRL, -1, -1, &server, 1));
 
 	context = paf_attach(ts_domain_name);
 
@@ -1167,7 +1195,8 @@ static int run_certificate_revocation(bool after_rescan)
 
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 				       TS_CLIENT_KEY, TS_CLIENT_TC,
-				       TS_REVOKED_SERVER_CERT_CRL, &server, 1));
+				       TS_REVOKED_SERVER_CERT_CRL, -1, -1,
+				       &server, 1));
 
     if (after_rescan)
 	CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
@@ -1351,7 +1380,7 @@ TESTCASE(paf, local_addr)
     CHKNOERR(ts_server_start(&server));
 
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, NULL, NULL, NULL,
-				       NULL, &server, 1));
+				       NULL, -1, -1, &server, 1));
 
     struct paf_context *context = paf_attach(ts_domain_name);
 
@@ -1407,7 +1436,7 @@ TESTCASE(paf, multi_homed_server)
     CHKNOERR(ts_server_start(&server_server));
 
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, NULL, NULL, NULL,
-				       NULL, &client_server, 1));
+				       NULL, -1, -1, &client_server, 1));
 
     struct paf_context *context = paf_attach(ts_domain_name);
 
