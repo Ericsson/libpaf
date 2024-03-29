@@ -79,7 +79,6 @@ struct link
     int64_t detached_tmo;
     double max_detach_time;
 
-    int64_t next_ta_id;
     struct msg_queue out_queue;
 
     char *log_ref;

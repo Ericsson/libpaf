@@ -629,11 +629,19 @@ static void clear_sub_relays(struct link *link)
     }
 }
 
+static void clear_track(struct link *link)
+{
+    link->track_ta_id = -1;
+    link->max_idle_time = conf_get_idle_max();
+    link->track_query_ts = -1;
+}
+
 static void clear(struct link *link)
 {
     clear_service_relays(link);
     clear_sub_relays(link);
     clear_tmos(link);
+    clear_track(link);
 }
 
 static void service_changed(struct link *link, int64_t obj_id,
