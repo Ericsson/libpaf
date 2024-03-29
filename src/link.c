@@ -152,6 +152,25 @@ static void fail_cb(int64_t ta_id UT_UNUSED, int fail_reason_err UT_UNUSED,
     handle_error(link);
 }
 
+static void server_active(struct link *link)
+{
+    if (link->state == link_state_operational &&
+	is_tracking(link)) {
+
+	if (is_track_querying(link))
+	    /* We've heard from the server, so we can post-poned query
+	       reply timeout. This is useful since the reply may
+	       already be in our socket buffer. A large backlog of
+	       incoming messages may cause the idle timeout to fire,
+	       needlessly tearing down the connection. */
+	    schedule_idle_reply_tmo(link);
+	else
+	    /* We've heard from the server, so we can post-pone the next
+	       track query */
+	    schedule_idle_query_tmo(link);
+    }
+}
+
 static void track_notify_cb(int64_t ta_id, bool is_query, void *cb_data)
 {
     struct link *link = cb_data;
@@ -159,10 +178,6 @@ static void track_notify_cb(int64_t ta_id, bool is_query, void *cb_data)
     if (is_query) {
 	log_link_track_replied(link);
 	conn_track_inform(link->conn, ta_id, false);
-
-	/* Delay idle query timeout */
-	if (!is_track_querying(link))
-	    schedule_idle_query_tmo(link);
     } else {
 	if (!is_track_querying(link)) {
 	    log_link_track_unsolicited_reply(link);
@@ -170,11 +185,16 @@ static void track_notify_cb(int64_t ta_id, bool is_query, void *cb_data)
 	} else {
 	    double latency =
 		ut_ftime(CLOCK_MONOTONIC) - link->track_query_ts;
+
 	    log_link_track_reply(link, latency);
 	    link->track_query_ts = -1;
-	    schedule_idle_query_tmo(link);
+
+	    if (link->state == link_state_operational)
+		schedule_idle_query_tmo(link);
 	}
     }
+
+    server_active(link);
 }
 
 static void track_complete_cb(int64_t ta_id UT_UNUSED, void *cb_data)
@@ -247,6 +267,8 @@ static void publish_complete_cb(int64_t ta_id, void *cb_data)
 	unsync_service(link, service_relay);
     else if (service_relay->pending_sync)
 	sync_service(link, service_relay);
+
+    server_active(link);
 }
 
 static void sync_sub(struct link *link, struct relay *sub_relay);
@@ -264,6 +286,8 @@ static void unpublish_complete_cb(int64_t ta_id, void *cb_data)
     LIST_REMOVE(service_relay, entry);
 
     relay_destroy(service_relay);
+
+    server_active(link);
 }
 
 static void check_sub_relay_removal(struct link *link,
@@ -292,6 +316,8 @@ static void subscribe_accept_cb(int64_t ta_id, void *cb_data)
 	unsync_sub(link, sub_relay);
     else if (sub_relay->pending_sync)
 	sync_sub(link, sub_relay);
+
+    server_active(link);
 }
 
 static void subscribe_notify_cb(int64_t ta_id, enum paf_match_type match_type,
@@ -319,6 +345,8 @@ static void subscribe_notify_cb(int64_t ta_id, enum paf_match_type match_type,
 			match_type, service_id, generation,
 			props, ttl, orphan_since) < 0)
 	handle_error(link);
+
+    server_active(link);
 }
 
 static void subscribe_complete_cb(int64_t ta_id, void *cb_data)
@@ -329,6 +357,8 @@ static void subscribe_complete_cb(int64_t ta_id, void *cb_data)
 
     sub_relay->sync_ta_id = -1;
     check_sub_relay_removal(link, sub_relay);
+
+    server_active(link);
 }
 
 static void unsubscribe_complete_cb(int64_t ta_id, void *cb_data)
@@ -339,6 +369,8 @@ static void unsubscribe_complete_cb(int64_t ta_id, void *cb_data)
 
     sub_relay->unsync_ta_id = -1;
     check_sub_relay_removal(link, sub_relay);
+
+    server_active(link);
 }
 
 static void sync_service(struct link *link, struct relay *service_relay)

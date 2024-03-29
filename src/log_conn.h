@@ -45,14 +45,14 @@
 #define log_conn_disabled_tcp_keepalive(conn, xcm_errno)	\
     log_conn_debug(conn, "Disabled TCP keepalive.")
 
-#define log_conn_close(conn)				\
+#define log_conn_close(conn)			\
     log_conn_debug(conn, "Connection closed.")
 
-#define log_conn_request(conn, request_str)			\
-    log_conn_debug(conn, "Outgoing request: %s.", request_str)
+#define log_conn_out_msg(conn, msg_str)				\
+    log_conn_debug(conn, "Outgoing message: %s.", msg_str)
 
-#define log_conn_response(conn, response_str)				\
-    log_conn_debug(conn, "Incoming response: %s.", response_str)
+#define log_conn_in_msg(conn, msg_str)				\
+    log_conn_debug(conn, "Incoming response: %s.", msg_str)
 
 #define log_conn_ta_failure(conn, ta_id, reason)			\
     do {                                                                \
