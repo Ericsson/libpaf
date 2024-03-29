@@ -1083,13 +1083,20 @@ int conn_clients(struct conn *conn, conn_clients_cb cb, void *cb_data)
     return result.result.rc;
 }
 
+#define MAX_OUT_MSGS_PER_CALL (64)
+
 static int process_outgoing(struct conn *conn)
 {
     if (TAILQ_EMPTY(&conn->out_queue))
 	return 0;
 
-    struct msg *out_msg;
-    while ((out_msg = TAILQ_FIRST(&conn->out_queue)) != NULL) {
+    int count;
+    for (count = 0; count < MAX_OUT_MSGS_PER_CALL; count++) {
+	struct msg *out_msg = TAILQ_FIRST(&conn->out_queue);
+
+	if (out_msg == NULL)
+	    break;
+
         UT_SAVE_ERRNO;
         int rc = xcm_send(conn->sock, out_msg->data, strlen(out_msg->data));
         UT_RESTORE_ERRNO(send_errno);
@@ -1097,7 +1104,7 @@ static int process_outgoing(struct conn *conn)
         if (rc < 0)
             return send_errno == EAGAIN ? 0 : -1;
 
-        log_conn_request(conn, out_msg->data);
+        log_conn_out_msg(conn, out_msg->data);
 
         TAILQ_REMOVE(&conn->out_queue, out_msg, entry);
 
@@ -1111,13 +1118,15 @@ static int process_outgoing(struct conn *conn)
 }
 
 #define MSG_MAX (65535)
+#define MAX_IN_MSGS_PER_CALL (64)
 
 static int process_incoming(struct conn *conn)
 {
     char* buf = ut_malloc(MSG_MAX);
+    int rc = 0;
 
-    int rc;
-    for (;;) {
+    int count;
+    for (count = 0; count < MAX_IN_MSGS_PER_CALL; count++) {
 	int xcm_rc = xcm_receive(conn->sock, buf, MSG_MAX);
 
 	if (xcm_rc == 0) {
@@ -1128,16 +1137,15 @@ static int process_incoming(struct conn *conn)
 	    if (errno != EAGAIN) {
 		log_conn_receive_error(conn, errno);
 		rc = -1;
-	    } else
-		rc = 0;
+	    }
 	    break;
 	}
 
-	struct msg *response = msg_create_buf(buf, xcm_rc);
+	struct msg *in_msg = msg_create_buf(buf, xcm_rc);
 
-	log_conn_response(conn, response->data);
+	log_conn_in_msg(conn, in_msg->data);
 
-	if (proto_ta_consume_response(&conn->transactions, response,
+	if (proto_ta_consume_response(&conn->transactions, in_msg,
 				      conn->log_ref) < 0) {
 	    rc = -1;
 	    break;
