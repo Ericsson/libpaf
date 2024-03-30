@@ -261,6 +261,8 @@ TESTCASE(paf, publish_unpublish_many)
         paf_props_add_int64(props, "num", num);
         CHKNOERR(ts_assure_service(service_ids[num], props));
         paf_props_destroy(props);
+	/* to avoid idle timeout */
+	CHKNOERR(paf_process(context));
     }
 
     for (i = 0; i < MANY; i++)

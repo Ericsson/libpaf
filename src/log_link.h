@@ -78,6 +78,10 @@
 #define log_link_sub_count(link, count)					\
     log_link_debug(link, "%zd subscription relays installed.", count)
 
+#define log_link_syncing_unsyncing(link, count)				\
+    log_link_debug(link, "%zd services and subscriptions are syncing or " \
+		   "unsyncing.", count)
+
 #define log_link_server_conn_eof(link)				\
     log_link_debug(link, "Server closed down XCM connection.")
 

@@ -19,6 +19,8 @@
 
 #define MAX_DETACH_TIME(num_services) (0.5 + 0.001 * (num_services))
 
+#define MAX_SYNCING_UNSYNCING_RELAYS (32)
+
 #define SLABEL(name)				     \
     case link_state_ ## name:                        \
     return #name
@@ -245,8 +247,8 @@ static void hello_complete_cb(int64_t ta_id UT_UNUSED, int64_t proto_version,
     link->listener = sd_add_listener(link->sd, sd_changed_cb, link);
 }
 
-static void sync_service(struct link *link, struct relay *service_relay);
-static void unsync_service(struct link *link, struct relay *service_relay);
+static void try_sync_service(struct link *link, struct relay *service_relay);
+static void try_unsync_service(struct link *link, struct relay *service_relay);
 
 static void publish_complete_cb(int64_t ta_id, void *cb_data)
 {
@@ -264,15 +266,15 @@ static void publish_complete_cb(int64_t ta_id, void *cb_data)
     service_relay->sync_ta_id = -1;
 
     if (service_relay->pending_unsync)
-	unsync_service(link, service_relay);
+	try_unsync_service(link, service_relay);
     else if (service_relay->pending_sync)
-	sync_service(link, service_relay);
+	try_sync_service(link, service_relay);
 
     server_active(link);
 }
 
-static void sync_sub(struct link *link, struct relay *sub_relay);
-static void unsync_sub(struct link *link, struct relay *sub_relay);
+static void try_sync_sub(struct link *link, struct relay *sub_relay);
+static void try_unsync_sub(struct link *link, struct relay *sub_relay);
 
 static void unpublish_complete_cb(int64_t ta_id, void *cb_data)
 {
@@ -313,9 +315,9 @@ static void subscribe_accept_cb(int64_t ta_id, void *cb_data)
     sub_relay->state = relay_state_synced;
 
     if (sub_relay->pending_unsync)
-	unsync_sub(link, sub_relay);
+	try_unsync_sub(link, sub_relay);
     else if (sub_relay->pending_sync)
-	sync_sub(link, sub_relay);
+	try_sync_sub(link, sub_relay);
 
     server_active(link);
 }
@@ -410,13 +412,58 @@ static void unsync_service(struct link *link, struct relay *service_relay)
 			    service_relay->unsync_ta_id);
 
     service_relay->state = relay_state_unsyncing;
+}
 
+static int count_syncing_unsyncing_objs(struct relay_list *list)
+{
+    int count = 0;
+
+    struct relay *relay;
+    LIST_FOREACH(relay, list, entry)
+	switch (relay->state) {
+	case relay_state_syncing:
+	case relay_state_unsyncing:
+	    count++;
+	    break;
+	default:
+	    break;
+    }
+
+    return count;
+}
+
+static int count_syncing_unsyncing(struct link *link)
+{
+    return count_syncing_unsyncing_objs(&link->service_relays) +
+	count_syncing_unsyncing_objs(&link->sub_relays);
+}
+
+static void try_sync_service(struct link *link, struct relay *service_relay)
+{
+    if (link->state == link_state_operational &&
+	(service_relay->state == relay_state_unsynced ||
+	 (service_relay->state == relay_state_synced &&
+	  service_relay->pending_sync)) &&
+	count_syncing_unsyncing(link) < MAX_SYNCING_UNSYNCING_RELAYS)
+	sync_service(link, service_relay);
+}
+
+static void try_unsync_service(struct link *link, struct relay *service_relay)
+{
+    if ((link->state == link_state_operational ||
+	 link->state == link_state_detaching) &&
+	service_relay->state == relay_state_synced &&
+	service_relay->pending_unsync &&
+	count_syncing_unsyncing(link) < MAX_SYNCING_UNSYNCING_RELAYS)
+	unsync_service(link, service_relay);
 }
 
 static void sync_sub(struct link *link, struct relay *sub_relay)
 {
     assert(link->state == link_state_operational);
     assert(sub_relay->state == relay_state_unsynced);
+
+    sub_relay->pending_sync = false;
 
     struct sub *sub = sd_get_sub(link->sd, sub_relay->obj_id);
 
@@ -436,6 +483,8 @@ static void unsync_sub(struct link *link, struct relay *sub_relay)
 	   link->state == link_state_detaching);
     assert(sub_relay->state == relay_state_synced);
 
+    sub_relay->pending_unsync = false;
+
     sub_relay->unsync_ta_id =
 	conn_unsubscribe_nb(link->conn, sub_relay->obj_id, fail_cb,
 			    unsubscribe_complete_cb, link);
@@ -443,6 +492,24 @@ static void unsync_sub(struct link *link, struct relay *sub_relay)
     log_link_sub_unsync(link, sub_relay->obj_id, sub_relay->unsync_ta_id);
 
     sub_relay->state = relay_state_unsyncing;
+}
+
+static void try_sync_sub(struct link *link, struct relay *sub_relay)
+{
+    if (link->state == link_state_operational &&
+	sub_relay->state == relay_state_unsynced &&
+	count_syncing_unsyncing(link) < MAX_SYNCING_UNSYNCING_RELAYS)
+	sync_sub(link, sub_relay);
+}
+
+static void try_unsync_sub(struct link *link, struct relay *sub_relay)
+{
+    if ((link->state == link_state_operational ||
+	 link->state == link_state_detaching) &&
+	sub_relay->state == relay_state_synced &&
+	sub_relay->pending_unsync &&
+	count_syncing_unsyncing(link) < MAX_SYNCING_UNSYNCING_RELAYS)
+	unsync_sub(link, sub_relay);
 }
 
 static double lowest_service_ttl(struct link *link)
@@ -492,7 +559,7 @@ static void install_service_relay(struct link *link, int64_t service_id)
     struct relay *service_relay = relay_create(service_id);
     LIST_INSERT_HEAD(&link->service_relays, service_relay, entry);
 
-    sync_service(link, service_relay);
+    try_sync_service(link, service_relay);
 
     adjust_max_idle_time(link);
 }
@@ -508,22 +575,18 @@ static void clear_service_relays(struct link *link)
 
 static void update_service_relay(struct link *link, int64_t service_id)
 {
-    assert(link->state == link_state_operational);
-
     struct relay *service_relay =
 	LIST_FIND(&link->service_relays, obj_id, service_id, entry);
-
-    assert(service_relay != NULL);
-    assert(!service_relay->pending_unsync);
 
     log_link_update_service_relay(link, service_id);
 
     switch (service_relay->state) {
-    case relay_state_synced:
-	sync_service(link, service_relay);
-	break;
     case relay_state_syncing:
 	service_relay->pending_sync = true;
+	break;
+    case relay_state_synced:
+	service_relay->pending_sync = true;
+	try_sync_service(link, service_relay);
 	break;
     case relay_state_unsynced:
     case relay_state_unsyncing:
@@ -551,16 +614,17 @@ static void uninstall_service_relay(struct link *link, int64_t service_id)
     log_link_uninstall_service_relay(link, service_id);
 
     switch (service_relay->state) {
-    case relay_state_synced:
-	if (!service_relay->pending_unsync)
-	    unsync_service(link, service_relay);
+    case relay_state_unsynced:
 	break;
     case relay_state_syncing:
 	service_relay->pending_unsync = true;
 	break;
+    case relay_state_synced:
+	service_relay->pending_unsync = true;
+	try_unsync_service(link, service_relay);
+	break;
     case relay_state_unsyncing:
 	break;
-    case relay_state_unsynced:
     default:
 	assert(0);
     }
@@ -585,7 +649,7 @@ static void install_sub_relay(struct link *link, int64_t sub_id)
     struct relay *sub_relay = relay_create(sub_id);
     LIST_INSERT_HEAD(&link->sub_relays, sub_relay, entry);
 
-    sync_sub(link, sub_relay);
+    try_sync_sub(link, sub_relay);
 }
 
 static void install_sub_relays(struct link *link)
@@ -605,16 +669,17 @@ static void uninstall_sub_relay(struct link *link, int64_t sub_id)
     log_link_uninstall_sub_relay(link, sub_id);
 
     switch (sub_relay->state) {
-    case relay_state_synced:
-	if (!sub_relay->pending_unsync)
-	    unsync_sub(link, sub_relay);
+    case relay_state_unsynced:
 	break;
     case relay_state_syncing:
 	sub_relay->pending_unsync = true;
 	break;
+    case relay_state_synced:
+	sub_relay->pending_unsync = true;
+	try_unsync_sub(link, sub_relay);
+	break;
     case relay_state_unsyncing:
 	break;
-    case relay_state_unsynced:
     default:
 	assert(0);
     }
@@ -836,6 +901,34 @@ static void check_idle(struct link *link)
     }
 }
 
+static void try_sync_services(struct link *link)
+{
+    struct relay *relay;
+    LIST_FOREACH(relay, &link->service_relays, entry)
+	try_sync_service(link, relay);
+}
+
+static void try_unsync_services(struct link *link)
+{
+    struct relay *relay;
+    LIST_FOREACH(relay, &link->service_relays, entry)
+	try_unsync_service(link, relay);
+}
+
+static void try_sync_subs(struct link *link)
+{
+    struct relay *relay;
+    LIST_FOREACH(relay, &link->sub_relays, entry)
+	try_sync_sub(link, relay);
+}
+
+static void try_unsync_subs(struct link *link)
+{
+    struct relay *relay;
+    LIST_FOREACH(relay, &link->sub_relays, entry)
+	try_unsync_sub(link, relay);
+}
+
 int link_process(struct link *link)
 {
     log_link_processing(link, link_state_str(link->state));
@@ -853,6 +946,18 @@ int link_process(struct link *link)
 
 	if (conn_process(link->conn) < 0)
 	    handle_error(link);
+    }
+
+    if (link->state == link_state_operational ||
+	link->state == link_state_detaching) {
+	size_t in_progress = count_syncing_unsyncing(link);
+	log_link_syncing_unsyncing(link, in_progress);
+
+	try_sync_services(link);
+	try_sync_subs(link);
+
+	try_unsync_services(link);
+	try_unsync_subs(link);
     }
 
     if (link->state == link_state_operational)

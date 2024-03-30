@@ -852,8 +852,8 @@ int conn_services(struct conn *conn, const char *filter, conn_services_cb cb,
 }
 
 static void publish_response_cb(int64_t ta_id, enum proto_msg_type msg_type,
-				    void **args UT_UNUSED, void **optargs,
-				    void *cb_data)
+				void **args UT_UNUSED, void **optargs,
+				void *cb_data)
 {
     struct conn *conn = cb_data;
     struct call *call = find_call(conn, ta_id);
