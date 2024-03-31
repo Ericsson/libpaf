@@ -589,7 +589,9 @@ static void run_ping(const char *cmd, const char *const *args, size_t num,
 int session_init(int64_t client_id, const char *addr)
 {
     struct server_conf server = {
-	.addr = ut_strdup(addr)
+	.addr = ut_strdup(addr),
+	.proto_version_min = -1,
+	.proto_version_max = -1
     };
 
     char log_ref[1024];
