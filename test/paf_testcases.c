@@ -43,6 +43,7 @@ static bool is_in_valgrind(void)
 #define MAX_DETACH_TIME (DETACH_TIMEOUT + LAG)
 
 #define TTL (1)
+#define IDLE_MIN (2)
 
 static int setenv_double(const char *name, double value)
 {
@@ -75,6 +76,9 @@ static int setup(unsigned int setup_flags)
 	return UTEST_FAILED;
 
     if (setenv_double("PAF_TTL", TTL) < 0)
+	return UTEST_FAILED;
+
+    if (setenv_double("PAF_IDLE_MIN", IDLE_MIN) < 0)
 	return UTEST_FAILED;
 
     return UTEST_SUCCESS;

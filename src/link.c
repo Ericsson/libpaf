@@ -126,13 +126,14 @@ static bool is_track_querying(struct link *link)
     return link->track_query_ts >= 0;
 }
 
-#define IDLE_QUERY_THRESHOLD 0.75
+#define IDLE_QUERY_THRESHOLD 0.5
 
 static void schedule_idle_query_tmo(struct link *link)
 {
     assert(is_tracking(link) && !is_track_querying(link));
 
-    double idle_query_time = link->max_idle_time * IDLE_QUERY_THRESHOLD;
+    double idle_query_time =
+	ut_jitter(link->max_idle_time * IDLE_QUERY_THRESHOLD, 0.1);
 
     ptimer_reschedule_rel(link->timer, idle_query_time, &link->idle_tmo);
 }

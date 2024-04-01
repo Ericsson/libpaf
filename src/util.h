@@ -40,6 +40,7 @@ double ut_ftime(clockid_t clk_id);
 int64_t ut_rand_id(void);
 double ut_frand(void);
 double ut_frandomize(double d);
+double ut_jitter(double base, double max_jitter);
 
 pid_t ut_gettid(void);
 

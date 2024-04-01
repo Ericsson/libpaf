@@ -163,9 +163,14 @@ double ut_frand(void)
 
 double ut_frandomize(double d)
 {
-    double k = ut_frand() + 0.5;
+    return ut_jitter(d, 0.5);
+}
 
-    return k * d;
+double ut_jitter(double base, double max_jitter)
+{
+    double k = 1.0 + ((ut_frand() - 0.5) * 2) * max_jitter;
+
+    return k * base;
 }
 
 pid_t ut_gettid(void)

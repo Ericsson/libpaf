@@ -25,7 +25,7 @@
 #define DEFAULT_RECONNECT_MAX (5) /* s */
 
 #define IDLE_MIN_ENV "PAF_IDLE_MIN"
-#define DEFAULT_IDLE_MIN (2) /* s */
+#define DEFAULT_IDLE_MIN (4) /* s */
 #define HARD_MIN_IDLE_MIN (1) /* s */
 
 #define IDLE_MAX_ENV "PAF_IDLE_MAX"
