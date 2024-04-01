@@ -250,10 +250,23 @@ TESTCASE(paf, publish_unpublish_many)
     int64_t service_ids[MANY];
     int i;
     for (i = 0; i < MANY; i++) {
+	bool modify = tu_randbool();
+
         struct paf_props *props = paf_props_clone(base_props);
-        paf_props_add_int64(props, "num", i);
+        paf_props_add_int64(props, "num", modify ? 4711 : i);
+
         service_ids[i] = paf_publish(context, props);
+
         paf_props_destroy(props);
+
+	if (modify) {
+	    struct paf_props *new_props = paf_props_clone(base_props);
+	    paf_props_add_int64(new_props, "num", i);
+
+	    CHKNOERR(paf_modify(context, service_ids[i], new_props));
+	    paf_props_destroy(new_props);
+	}
+
         CHK(service_ids[i] >= 0);
     }
 
