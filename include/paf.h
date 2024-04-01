@@ -215,7 +215,7 @@ extern "C" {
  * have been matched in one of its subscriptions.
  *
  * The actual max idle time will never be set to lower than @c
- * PAF_IDLE_MIN, which is 2 seconds by default. To protect the server,
+ * PAF_IDLE_MIN, which is 4 seconds by default. To protect the server,
  * @c libpaf will treat @c PAF_IDLE_MIN set lower than 1 second as set
  * to 1 second.
  *
