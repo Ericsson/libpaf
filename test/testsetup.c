@@ -124,6 +124,50 @@ int ts_signal_servers(int signo)
     return rc;
 }
 
+int ts_server_pause(struct server *server)
+{
+    if (ts_server_signal(server, SIGSTOP) < 0)
+	return -1;
+
+    return 0;
+}
+
+int ts_pause_servers(void)
+{
+    int rc = 0;
+    int i;
+
+    for (i = 0; i < TS_NUM_SERVERS; i++) {
+	struct server *server = &ts_servers[i];
+	if (server->pid > 0 && ts_server_pause(server) < 0)
+	    rc = -1;
+    }
+
+    return rc;
+}
+
+int ts_server_unpause(struct server *server)
+{
+    if (ts_server_signal(server, SIGCONT) < 0)
+	return -1;
+
+    return 0;
+}
+
+int ts_unpause_servers(void)
+{
+    int rc = 0;
+    int i;
+
+    for (i = 0; i < TS_NUM_SERVERS; i++) {
+	struct server *server = &ts_servers[i];
+	if (server->pid > 0 && ts_server_unpause(server) < 0)
+	    rc = -1;
+    }
+
+    return rc;
+}
+
 int ts_server_stop(struct server *server)
 {
     if (ts_server_signal(server, SIGTERM) < 0)
@@ -704,6 +748,38 @@ int ts_assure_subscription(int64_t sub_id, const char *filter)
     int i;
     for (i = 0; i < TS_NUM_SERVERS; i++) {
 	int rc = ts_server_assure_subscription(&ts_servers[i], sub_id, filter);
+	if (rc < 0)
+	    return rc;
+    }
+    return 0;
+}
+
+int ts_server_assure_supports_v3(struct server *server)
+{
+    int rc = -1;
+    struct conn *conn = server_connect(server);
+
+    if (conn == NULL)
+	goto out_close;
+
+    int64_t proto_version = conn_get_proto_version(conn);
+
+    if (proto_version == 3)
+	rc = 0;
+    else
+	errno = ENOTSUP;
+
+out_close:
+    conn_close(conn);
+
+    return rc;
+}
+
+int ts_assure_supports_v3(void)
+{
+    int i;
+    for (i = 0; i < TS_NUM_SERVERS; i++) {
+	int rc = ts_server_assure_supports_v3(&ts_servers[i]);
 	if (rc < 0)
 	    return rc;
     }

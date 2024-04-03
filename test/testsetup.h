@@ -61,8 +61,16 @@ extern char *ts_domains_filename;
 
 int ts_server_start(struct server *server);
 int ts_start_servers(void);
+
+int ts_server_pause(struct server *server);
+int ts_pause_servers(void);
+
+int ts_server_unpause(struct server *server);
+int ts_unpause_servers(void);
+
 int ts_server_stop(struct server *server);
 int ts_stop_servers(void);
+
 int ts_server_signal(struct server *server, int signo);
 int ts_signal_servers(int signo);
 void ts_server_clear(struct server *server);
@@ -96,5 +104,7 @@ int ts_assure_service_count(int count);
 int ts_server_assure_subscription(struct server *server, int64_t sub_id,
 				  const char *filter);
 int ts_assure_subscription(int64_t sub_id, const char *filter);
+int ts_assure_supports_v3(void);
+int ts_server_assure_supports_v3(struct server *server);
 
 #endif

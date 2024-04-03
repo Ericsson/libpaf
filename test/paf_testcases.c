@@ -426,12 +426,47 @@ TESTCASE(paf, modify_synced)
     return test_modify(sync_mode_synced);
 }
 
+struct hits
+{
+    int appeared;
+    int modified;
+    int disappeared;
+    int invalid;
+};
+
+static bool hits_appeared_disappeared_only(const struct hits *hits,
+					   int appeared, int disappeared)
+{
+    return hits->appeared == appeared && hits->modified == 0 &&
+	hits->disappeared == disappeared && hits->invalid == 0;
+}
+
+static bool hits_appeared_only(const struct hits *hits, int appeared)
+{
+    return hits_appeared_disappeared_only(hits, appeared, 0);
+}
+
 static void count_match_cb(enum paf_match_type match_type, int64_t service_id,
                            const struct paf_props *props, void *user)
 {
-    int *hits = user;
-    if (hits != NULL)
-        (*hits)++;
+    struct hits *hits = user;
+
+    if (hits != NULL) {
+	switch (match_type) {
+	case paf_match_type_appeared:
+	    hits->appeared++;
+	    break;
+	case paf_match_type_modified:
+	    hits->modified++;
+	    break;
+	case paf_match_type_disappeared:
+	    hits->disappeared++;
+	    break;
+	default:
+	    hits->invalid++;
+	    break;
+	}
+    }
 }
 
 static pid_t __attribute__ ((noinline))
@@ -468,7 +503,7 @@ static int run_subscribe_flaky_server(bool force_v2)
 {
     struct paf_context *context = paf_attach(ts_domain_name);
 
-    int hits = 0;
+    struct hits hits = {};
 
     const char *filter_s = "(name=foo)";
     int64_t sub_id = paf_subscribe(context, filter_s, count_match_cb, &hits);
@@ -484,9 +519,11 @@ static int run_subscribe_flaky_server(bool force_v2)
 
     do {
 	CHKNOERR(wait_for(context, 0.1));
-    } while (hits != 1 ||
+    } while (hits.appeared != 1 ||
 	     ts_assure_service(-1, props) < 0 ||
 	     ts_assure_subscription(sub_id, filter_s) < 0);
+
+    CHK(hits_appeared_only(&hits, 1));
 
     CHKNOERR(ts_stop_servers());
 
@@ -501,10 +538,12 @@ static int run_subscribe_flaky_server(bool force_v2)
 
     /* the library should have filtered the 'appeared' event, since
        this is a previously known service */
-    CHKINTEQ(hits, 1);
+    CHK(hits_appeared_only(&hits, 1));
 
-    while (hits != 2)
+    while (hits.disappeared == 0)
         CHKNOERR(wait_for(context, 0.1));
+
+    CHK(hits_appeared_disappeared_only(&hits, 1, 1));
 
     paf_close(context);
 
@@ -536,11 +575,14 @@ static int run_subscription_match(bool force_v2)
 					   NULL, 2, 2, ts_servers,
 					   TS_NUM_SERVERS));
 
-    struct paf_context *context = paf_attach(ts_domain_name);
+    struct paf_context *sub_context = paf_attach(ts_domain_name);
+    struct paf_context *pub_context = paf_attach(ts_domain_name);
+    struct paf_context *contexts[] = { pub_context, sub_context };
 
     const char *filter_s = "(|(name=foo)(name=bar))";
-    int hits = 0;
-    int64_t sub_id = paf_subscribe(context, filter_s, count_match_cb, &hits);
+    struct hits hits = {};
+    int64_t sub_id =
+	paf_subscribe(sub_context, filter_s, count_match_cb, &hits);
 
     CHKNOERR(sub_id);
 
@@ -549,18 +591,21 @@ static int run_subscription_match(bool force_v2)
     struct paf_props *props = paf_props_create();
     paf_props_add_str(props, "name", "bar");
 
-    int64_t service_id = paf_publish(context, props);
+    int64_t service_id = paf_publish(pub_context, props);
+
+    paf_set_ttl(pub_context, service_id, 1);
 
     paf_props_destroy(props);
 
     CHKNOERR(service_id);
 
-    while (hits == 0)
-        CHKNOERR(wait_for(context, 0.1));
+    while (hits.appeared == 0)
+        CHKNOERR(wait_for_all(contexts, 2, 2));
 
-    CHKINTEQ(hits, 1);
+    CHK(hits_appeared_only(&hits, 1));
 
-    paf_close(context);
+    paf_close(sub_context);
+    paf_close(pub_context);
 
     CHKNOERR(ts_stop_servers());
 
@@ -602,13 +647,15 @@ TESTCASE_F(paf, match_with_most_servers_down, REQUIRE_NO_LOCAL_PORT_BIND)
     for (i = 0; i < (TS_NUM_SERVERS - 1); i++)
 	ts_server_stop(&ts_servers[i]);
 
-    int hits = 0;
+    struct hits hits = {};
     CHKNOERR(paf_subscribe(sub_context, "(|(name=*)(age=42))",
 			   count_match_cb, &hits));
 
     do {
 	CHKNOERR(wait_for_all(contexts, 2, 0.1));
-    } while (hits != 1);
+    } while (hits.appeared == 0);
+
+    CHK(hits_appeared_only(&hits, 1));
 
     paf_props_destroy(props);
     paf_close(sub_context);
@@ -676,20 +723,31 @@ TESTCASE(paf, subscription_escaped)
 
 enum timeout_mode
 {
-    timeout_mode_server_unavailable,
+    timeout_mode_server_stopped,
+    timeout_mode_server_paused,
     timeout_mode_client_disconnect
 };
 
 static int test_timeout_ttl(enum timeout_mode mode, int64_t ttl)
 {
+    const double paf_idle_min = 1;
+    const double paf_idle_max = 2;
+    CHKNOERR(setenv_double("PAF_IDLE_MIN", paf_idle_min));
+    CHKNOERR(setenv_double("PAF_IDLE_MAX", paf_idle_max));
+
+    CHKNOERR(ts_start_servers());
+
+    if (mode == timeout_mode_server_paused && ts_assure_supports_v3() < 0) {
+	ts_stop_servers();
+	return UTEST_NOT_RUN;
+    }
+
     struct paf_context *sub_context = paf_attach(ts_domain_name);
 
-    int hits = 0;
+    struct hits hits = {};
     int64_t sub_id = paf_subscribe(sub_context, NULL, count_match_cb, &hits);
 
     CHKNOERR(sub_id);
-
-    CHKNOERR(ts_start_servers());
 
     struct paf_context *pub_context = paf_attach(ts_domain_name);
 
@@ -706,36 +764,48 @@ static int test_timeout_ttl(enum timeout_mode mode, int64_t ttl)
     do {
         struct paf_context *contexts[] = { pub_context, sub_context };
         CHKNOERR(wait_for_all(contexts, 2, 0.1));
-    } while (hits != 1);
+    } while (hits.appeared != 1);
 
     double start = ut_ftime(CLOCK_REALTIME);
 
-    if (mode == timeout_mode_server_unavailable)
+    if (mode == timeout_mode_server_stopped)
         CHKNOERR(ts_stop_servers());
+    else if (mode == timeout_mode_server_paused)
+        CHKNOERR(ts_pause_servers());
     else
         paf_close(pub_context);
 
     tu_msleep(tu_randint(0, 10));
 
     do {
-        if (mode == timeout_mode_server_unavailable)
+        if (mode == timeout_mode_server_stopped ||
+	    mode == timeout_mode_server_paused)
             CHKNOERR(wait_for(pub_context, 0.01));
         CHKNOERR(wait_for(sub_context, 0.01));
-    } while (hits == 1);
+    } while (hits.disappeared == 0);
 
     double latency = ut_ftime(CLOCK_REALTIME) - start;
 
-    CHKINTEQ(hits, 2);
+    CHK(hits_appeared_disappeared_only(&hits, 1, 1));
 
     CHK(latency > ttl);
-    CHK(latency < (ttl+0.5));
+    if (mode == timeout_mode_server_paused)
+	CHK(latency < (paf_idle_max + ttl + 0.5));
+    else
+	CHK(latency < (ttl + 0.5));
 
     paf_close(sub_context);
 
-    if (mode == timeout_mode_server_unavailable)
-        paf_close(pub_context);
-    else
+    if (mode == timeout_mode_server_paused)
+	CHKNOERR(ts_unpause_servers());
+
+    if (mode == timeout_mode_server_paused ||
+	mode == timeout_mode_client_disconnect)
         CHKNOERR(ts_stop_servers());
+
+    if (mode == timeout_mode_server_stopped ||
+	mode == timeout_mode_server_paused)
+        paf_close(pub_context);
 
     return UTEST_SUCCESS;
 }
@@ -749,19 +819,24 @@ static int test_timeout(enum timeout_mode mode)
 	return rc;
     if ((rc = test_timeout_ttl(mode, 0)) < 0)
 	return rc;
+
     return UTEST_SUCCESS;
 }
 
-TESTCASE(paf, match_timeout_after_server_unavailability)
+TESTCASE(paf, match_timeout_after_server_crash)
 {
-    return test_timeout(timeout_mode_server_unavailable);
+    return test_timeout(timeout_mode_server_stopped);
+}
+
+TESTCASE(paf, match_timeout_after_server_hang)
+{
+    return test_timeout(timeout_mode_server_paused);
 }
 
 TESTCASE(paf, match_timeout_after_client_disconnect)
 {
     return test_timeout(timeout_mode_client_disconnect);
 }
-
 TESTCASE(paf, invalid_filter)
 {
     CHKNOERR(ts_start_servers());
