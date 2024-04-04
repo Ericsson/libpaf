@@ -68,6 +68,7 @@ static void set_state(struct link *link, enum link_state state)
 static void clear_tmos(struct link *link)
 {
     ptimer_cancel(link->timer, &link->reconnect_tmo);
+    ptimer_cancel(link->timer, &link->greeting_tmo);
     ptimer_cancel(link->timer, &link->idle_tmo);
     ptimer_cancel(link->timer, &link->detached_tmo);
 }
@@ -157,9 +158,7 @@ static void fail_cb(int64_t ta_id UT_UNUSED, int fail_reason_err UT_UNUSED,
 
 static void server_active(struct link *link)
 {
-    if (link->state == link_state_operational &&
-	is_tracking(link)) {
-
+    if (link->state == link_state_operational && is_tracking(link)) {
 	if (is_track_querying(link))
 	    /* We've heard from the server, so we can post-poned query
 	       reply timeout. This is useful since the reply may
@@ -235,6 +234,8 @@ static void hello_complete_cb(int64_t ta_id UT_UNUSED, int64_t proto_version,
     struct link *link = cb_data;
 
     log_link_operational(link, proto_version);
+
+    ptimer_cancel(link->timer, &link->greeting_tmo);
 
     set_state(link, link_state_operational);
 
@@ -861,6 +862,9 @@ static void try_connect(struct link *link)
 
     set_state(link, link_state_greeting);
 
+    double max_greeting_time = conf_get_idle_min();
+    link->greeting_tmo = ptimer_schedule_rel(link->timer, max_greeting_time);
+
     conn_hello_nb(link->conn, fail_cb, hello_complete_cb, link);
 }
 
@@ -930,6 +934,14 @@ static void try_unsync_subs(struct link *link)
 	try_unsync_sub(link, relay);
 }
 
+static void check_greeting_timeout(struct link *link)
+{
+    if (ptimer_has_expired(link->timer, link->greeting_tmo)) {
+	log_link_greeting_timeout(link);
+	handle_error(link);
+    }
+}
+
 int link_process(struct link *link)
 {
     log_link_processing(link, link_state_str(link->state));
@@ -948,6 +960,9 @@ int link_process(struct link *link)
 	if (conn_process(link->conn) < 0)
 	    handle_error(link);
     }
+
+    if (link->state == link_state_greeting)
+	check_greeting_timeout(link);
 
     if (link->state == link_state_operational ||
 	link->state == link_state_detaching) {

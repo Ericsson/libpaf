@@ -224,6 +224,11 @@ extern "C" {
  *
  * On version 3 connections, TCP keepalive is disabled.
  *
+ * The minimum idle time is also used as an upper bound for the total
+ * amount of time the initial transport connection establishment
+ * (e.g., TCP three-way handshake and TLS hello) and the Pathfinder
+ * protocol-level hello transaction is allowed to take.
+ *
  * @section multihoming DNS and Multihomed Servers
  *
  * The host part of the XCM server address in the @ref domain_conf may

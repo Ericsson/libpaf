@@ -234,6 +234,146 @@ TESTCASE_F(paf, publish_flaky_servers, REQUIRE_NO_LOCAL_PORT_BIND)
     return UTEST_SUCCESS;
 }
 
+static pid_t broken_proxy(const char *local_addr, const char *remote_addr,
+			  double duration)
+{
+    pid_t p = fork();
+
+    if (p < 0)
+        return -1;
+    else if (p > 0)
+	return p;
+
+    setenv("XCM_TLS_CERT", TS_SERVER_CERT_DIR, 1);
+    struct xcm_socket *server_socket = xcm_server(local_addr);
+
+    setenv("XCM_TLS_CERT", TS_CLIENT_CERT_DIR, 1);
+    struct xcm_socket *remote_conn = xcm_connect(remote_addr, 0);
+
+    if (server_socket == NULL || remote_conn == NULL ||
+	xcm_set_blocking(remote_conn, false) < 0)
+	exit(EXIT_FAILURE);
+
+    struct xcm_socket *local_conn0 = xcm_accept(server_socket);
+    if (local_conn0 == NULL)
+	exit(EXIT_FAILURE);
+
+    struct xcm_socket *local_conn1 = NULL;
+
+    if (xcm_set_blocking(local_conn0, false) < 0 ||
+	xcm_set_blocking(server_socket, false) < 0)
+	exit(EXIT_FAILURE);
+
+    size_t to_client_msg[65535];
+    int to_client_len = -1;
+    size_t to_server_msg[65535];
+    int to_server_len = -1;
+
+    double deadline = ut_ftime(CLOCK_MONOTONIC) + duration;
+
+    while (ut_ftime(CLOCK_MONOTONIC) < deadline) {
+	usleep(1000);
+
+	xcm_finish(local_conn0);
+	xcm_finish(server_socket);
+
+	if (local_conn1 == NULL) {
+	    local_conn1 = xcm_accept(server_socket);
+	    continue;
+	} else
+	    xcm_finish(local_conn1);
+
+	if (to_server_len < 0) {
+	    to_server_len = xcm_receive(local_conn1, to_server_msg,
+					sizeof(to_server_msg));
+	    if (to_server_len == 0 || (to_server_len < 0 && errno != EAGAIN))
+		exit(EXIT_FAILURE);
+	} else {
+	    int rc = xcm_send(remote_conn, to_server_msg, to_server_len);
+	    if (rc == 0)
+		to_server_len = -1;
+	    else if (rc < 0 && errno != EAGAIN)
+		exit(EXIT_FAILURE);
+	}
+
+	if (to_client_len < 0) {
+	    to_client_len = xcm_receive(remote_conn, to_client_msg,
+					sizeof(to_client_msg));
+	    if (to_client_len == 0 || (to_client_len < 0 && errno != EAGAIN))
+		exit(EXIT_FAILURE);
+	} else {
+	    int rc = xcm_send(local_conn1, to_client_msg, to_client_len);
+	    if (rc == 0)
+		to_client_len = -1;
+	    else if (rc < 0 && errno != EAGAIN)
+		exit(EXIT_FAILURE);
+	}
+    }
+
+    xcm_close(server_socket);
+    xcm_close(local_conn0);
+    xcm_close(local_conn1);
+    xcm_close(remote_conn);
+
+    exit(EXIT_SUCCESS);
+}
+
+/* See 'match_with_most_servers_down' on why this flag is needed. */
+TESTCASE_F(paf, publish_no_hello_response, REQUIRE_NO_LOCAL_PORT_BIND)
+{
+    char *proxy_addr = ts_random_addr();
+    struct server server = {
+	.addr = ts_random_addr()
+    };
+
+    CHKNOERR(ts_server_start(&server));
+
+    CHKNOERR(tu_executef_es("echo '%s' > %s", proxy_addr,
+			    ts_domains_filename));
+
+    pid_t pid = broken_proxy(proxy_addr, server.addr,
+			     IDLE_MIN + MAX_RECONNECT_PERIOD + 1);
+
+    struct paf_context *context = paf_attach(ts_domain_name);
+
+    CHK(context != NULL);
+
+    const int64_t cellid = 17;
+
+    struct paf_props *props = paf_props_create();
+    paf_props_add_str(props, "name", "foo");
+    paf_props_add_int64(props, "cellid", cellid);
+
+    int64_t service_id = paf_publish(context, props);
+
+    CHK(service_id >= 0);
+
+    double deadline =
+	ut_ftime(CLOCK_REALTIME) + IDLE_MIN + MAX_RECONNECT_PERIOD + 0.5;
+
+    while (ut_ftime(CLOCK_REALTIME) < deadline) {
+	CHKNOERR(paf_process(context));
+
+	if (ts_server_assure_service(&server, service_id, props) == 0)
+	    break;
+    }
+
+    CHKNOERR(ts_server_assure_service(&server, service_id, props));
+
+    CHKNOERR(ts_server_stop(&server));
+
+    tu_waitstatus(pid);
+
+    paf_close(context);
+
+    paf_props_destroy(props);
+
+    ut_free(proxy_addr);
+    ut_free(server.addr);
+
+    return UTEST_SUCCESS;
+}
+
 #define MANY (is_in_valgrind() ? 100 : 1000)
 
 TESTCASE(paf, publish_unpublish_many)

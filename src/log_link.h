@@ -17,6 +17,9 @@
 #define log_link_start(link)			\
     log_link_debug(link, "Link created.")
 
+#define log_link_greeting_timeout(link)			\
+    log_link_debug(link, "Server handshake timed out.")
+
 #define log_link_query_timeout(link)			\
     log_link_debug(link, "Server query timed out.")
 
