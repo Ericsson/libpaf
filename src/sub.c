@@ -95,7 +95,8 @@ void sub_orphan_all_from_source(struct sub *sub, int64_t source_id,
 
     struct match *match;
     LIST_FOREACH(match, &sub->matches, entry)
-	match_report_orphan(match, source_id, since);
+	if (!match_is_orphan(match))
+	    match_report_orphan(match, source_id, since);
 }
 
 bool sub_has_orphan(struct sub *sub)

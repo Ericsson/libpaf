@@ -211,6 +211,9 @@ TESTCASE(sd, orphan_all_from_source)
     sd_orphan_all_from_source(sd, source_id1, now);
     CHK(sd_has_timeout(sd));
 
+    /* marking an orphan orphan again should keep the old orphan time */
+    sd_orphan_all_from_source(sd, source_id1, now+ttl+99);
+
     sd_process(sd, now+ttl+1);
     CHK(!sd_has_timeout(sd));
 

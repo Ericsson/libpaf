@@ -9,27 +9,29 @@
 
 #include "match.h"
 
-static void source_service_orphan_update(struct source *source,
-					 const double *orphan_since)
-{
-    if (orphan_since != NULL)
-	source->orphan_since = *orphan_since;
-    else
-	source->orphan_since = -1;
-}
-
 static struct source *source_create(int64_t source_id,
 				    const double *orphan_since)
 {
     struct source *source = ut_malloc(sizeof(struct source));
 
     *source = (struct source) {
-	.source_id = source_id
+	.source_id = source_id,
+	.orphan_since = orphan_since == NULL ? -1 : *orphan_since
     };
 
-    source_service_orphan_update(source, orphan_since);
-
     return source;
+}
+
+static void source_service_orphan_update(struct source *source,
+					 const double *orphan_since)
+{
+    if (orphan_since != NULL) {
+	assert(*orphan_since >= 0);
+
+	if (source->orphan_since == -1 || *orphan_since < source->orphan_since)
+	    source->orphan_since = *orphan_since;
+    } else
+	source->orphan_since = -1;
 }
 
 static bool source_considers_service_orphan(struct source *source)
