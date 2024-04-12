@@ -60,7 +60,7 @@ int sub_report_match(struct sub *sub, int64_t source_id,
 		     const struct paf_props *props,
 		     const int64_t *ttl, const double *orphan_since)
 {
-    log_sub_server_match(sub, service_id, generation, props, ttl,
+    log_sub_server_match(sub, source_id, service_id, generation, props, ttl,
 			 orphan_since, match_type_str(match_type));
 
     struct match *match =
