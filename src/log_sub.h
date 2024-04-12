@@ -42,23 +42,14 @@
     do {                                                                \
         char buf[1024];							\
 	buf[0] = '\0';							\
-	ut_aprintf(buf, sizeof(buf), "Dispatching type \"%s\" "	\
+	ut_aprintf(buf, sizeof(buf), "Announcing type \"%s\" "	\
 		   "application-level match for service id 0x%"		\
 		   PRIx64".", match_type_str, service_id);		\
         if (props != NULL) {                                            \
             ut_aprintf(buf, sizeof(buf), " Props: ");			\
             log_aprint_props(buf, sizeof(buf), props);                  \
-	    log_sub_debug(sub, "%s.", buf);				\
         }                                                               \
+	log_sub_debug(sub, "%s", buf);					\
     } while (0)
-
-#define log_sub_stray_disappeared(sub, service_id)			\
-    log_sub_debug(sub, "Received a stray disappeared message for "	\
-		  "service id 0x%"PRIx64", which was likely an orphan " \
-		  "already locally removed.", service_id)
-
-#define log_sub_invalid_modified(sub, service_id)			\
-    log_sub_error(sub, "Received invalid modified message for unknown "	\
-		  "service id 0x%"PRIx64".")
 
 #endif

@@ -670,7 +670,6 @@ static int run_subscribe_flaky_server(bool force_v2)
     CHKNOERR(wait_for(context, 0.1));
 
     CHKNOERR(ts_start_servers());
-
     do {
 	CHKNOERR(wait_for(context, 0.1));
     } while (ts_assure_service(-1, props) < 0 ||

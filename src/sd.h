@@ -70,15 +70,16 @@ struct sub *sd_get_sub(struct sd *sd, int64_t sub_id);
 int sd_report_match(struct sd *sd, int64_t source_id, int64_t sub_id,
 		    enum paf_match_type match_type, int64_t service_id,
 		    const int64_t *generation, const struct paf_props *props,
-		    const int64_t *ttl, const double *orphan_since);
-void sd_orphan_all_from_source(struct sd *sd, int64_t source_id, double now);
+		    const int64_t *ttl, const double *orphan_since, double now);
+void sd_report_source_disconnected(struct sd *sd, int64_t source_id,
+				   double now);
 
 struct sd_listener *sd_add_listener(struct sd *sd, sd_listener_cb cb,
 				    void *user);
 void sd_remove_listener(struct sd *sd, struct sd_listener *listener);
 
 bool sd_has_timeout(struct sd *sd);
-double sd_next_timeout(struct sd *sd);
+double sd_get_timeout(struct sd *sd);
 void sd_process(struct sd *sd, double now);
 
 void sd_destroy(struct sd *sd);

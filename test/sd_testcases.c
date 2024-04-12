@@ -200,21 +200,25 @@ TESTCASE(sd, orphan_all_from_source)
     int64_t sub_id = sd_add_sub(sd, NULL, nop_match_cb, NULL);
 
     sd_report_match(sd, source_id0, sub_id, paf_match_type_appeared,
-		    service_id0, &service_generation, props, &ttl, NULL);
+		    service_id0, &service_generation, props, &ttl, NULL, -1);
     sd_report_match(sd, source_id1, sub_id, paf_match_type_appeared,
-		    service_id0, &service_generation, props, &ttl, NULL);
+		    service_id0, &service_generation, props, &ttl, NULL, -1);
 
     double now = ut_ftime(CLOCK_REALTIME);
-    sd_orphan_all_from_source(sd, source_id0, now);
+    sd_report_source_disconnected(sd, source_id0, now);
     CHK(!sd_has_timeout(sd));
 
-    sd_orphan_all_from_source(sd, source_id1, now);
+    sd_report_source_disconnected(sd, source_id1, now);
     CHK(sd_has_timeout(sd));
 
     /* marking an orphan orphan again should keep the old orphan time */
-    sd_orphan_all_from_source(sd, source_id1, now+ttl+99);
+    sd_report_source_disconnected(sd, source_id1, now+ttl+99);
 
-    sd_process(sd, now+ttl+1);
+    sd_process(sd, now + ttl + 1);
+    CHK(sd_has_timeout(sd));
+
+    sd_process(sd, now + ttl + 1000);
+    /* no stale timeouts should exists */
     CHK(!sd_has_timeout(sd));
 
     paf_props_destroy(props);
@@ -329,8 +333,8 @@ TESTCASE(sd, process_purges_orphans) {
     double timeout0 = orphan_since0 + ttl0;
 
     int64_t ttl1 = 20;
-    double orphan_since1 = 20;
-    double timeout1 = orphan_since1 + ttl1;
+    double source_disconnected_at = 20;
+    double timeout1 = source_disconnected_at + ttl1;
 
     double max_timeout = MAX(timeout0, timeout1);
     double min_timeout = MIN(timeout0, timeout1);
@@ -343,18 +347,23 @@ TESTCASE(sd, process_purges_orphans) {
     int64_t generation = 0;
 
     sd_report_match(sd, source_id, sub_id0, paf_match_type_appeared,
-		    service_id0, &generation, props, &ttl0, &orphan_since0);
+		    service_id0, &generation, props, &ttl0, &orphan_since0, -1);
     sd_report_match(sd, source_id, sub_id1, paf_match_type_appeared,
-		    service_id1, &generation, props, &ttl1, &orphan_since1);
+		    service_id1, &generation, props, &ttl1, NULL, -1);
+
+    sd_report_source_disconnected(sd, source_id, source_disconnected_at);
 
     CHK(sd_has_timeout(sd));
-    CHKDBLAPPROXEQ(sd_next_timeout(sd), min_timeout);
+    CHKDBLAPPROXEQ(sd_get_timeout(sd), min_timeout);
 
     sd_process(sd, min_timeout - 0.1);
     CHK(sd_has_timeout(sd));
 
     sd_process(sd, max_timeout + 0.1);
-    CHK(!sd_has_timeout(sd));
+    CHK(sd_has_timeout(sd));
+
+    /* stale timeout */
+    CHK(sd_get_timeout(sd) > max_timeout);
 
     paf_props_destroy(props);
     sd_destroy(sd);

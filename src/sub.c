@@ -45,10 +45,10 @@ static void app_match(enum paf_match_type match_type, int64_t service_id,
     sub->match_cb(match_type, service_id, props, sub->user);
 }
 
-static void check_disappearence(struct sub *sub __attribute__((unused)),
-				struct match *match)
+static void check_stale(struct sub *sub __attribute__((unused)),
+			struct match *match, double now)
 {
-    if (match_has_disappeared(match)) {
+    if (match_is_stale(match) && match_stale_timeout(match) <= now) {
 	LIST_REMOVE(match, entry);
 	match_destroy(match);
     }
@@ -58,7 +58,8 @@ int sub_report_match(struct sub *sub, int64_t source_id,
 		     enum paf_match_type match_type,
 		     int64_t service_id, const int64_t *generation,
 		     const struct paf_props *props,
-		     const int64_t *ttl, const double *orphan_since)
+		     const int64_t *ttl, const double *orphan_since,
+		     double now)
 {
     log_sub_server_match(sub, source_id, service_id, generation, props, ttl,
 			 orphan_since, match_type_str(match_type));
@@ -67,71 +68,60 @@ int sub_report_match(struct sub *sub, int64_t source_id,
 	LIST_FIND(&sub->matches, service_id, service_id, entry);
 
     if (match == NULL) {
-	/* Local and remote server orphan cleanup is a race, so you may
-	   get stray disappear notifications. */
-	if (match_type == paf_match_type_disappeared) {
-	    log_sub_stray_disappeared(sub, service_id);
-	    return 0;
-	} else if (match_type == paf_match_type_modified) {
-	    log_sub_invalid_modified(sub, service_id);
-	    return -1;
-	}
-
-	match = match_create();
+	match = match_create(service_id, sub->log_ref);
 	LIST_INSERT_HEAD(&sub->matches, match, entry);
     }
 
-    match_report(match, source_id, match_type, service_id, generation,
-		 props, ttl, orphan_since, app_match, sub);
-    check_disappearence(sub, match);
-
-    return 0;
+    return match_report(match, source_id, match_type, service_id, generation,
+			props, ttl, orphan_since, now, app_match, sub);
 }
 
-void sub_orphan_all_from_source(struct sub *sub, int64_t source_id,
-				double since)
+void sub_report_source_disconnected(struct sub *sub, int64_t source_id,
+				    double since)
 {
     assert(since >= 0);
 
     struct match *match;
     LIST_FOREACH(match, &sub->matches, entry)
-	if (!match_is_orphan(match))
-	    match_report_orphan(match, source_id, since);
+	match_report_source_disconnected(match, source_id, since);
 }
 
-bool sub_has_orphan(struct sub *sub)
+bool sub_has_timeout(struct sub *sub)
 {
     struct match *match;
     LIST_FOREACH(match, &sub->matches, entry) {
-	if (match_is_orphan(match))
+	if (match_is_unconnected_orphan(match) || match_is_stale(match))
 	    return true;
     }
     return false;
 }
 
-double sub_next_orphan_timeout(struct sub *sub)
+double sub_get_timeout(struct sub *sub)
 {
-    double next_timeout = DBL_MAX;
+    double candidate = DBL_MAX;
 
     struct match *match;
     LIST_FOREACH(match, &sub->matches, entry) {
-        if (match_is_orphan(match)) {
-	    double orphan_timeout = match_orphan_timeout(match);
-	    if (orphan_timeout < next_timeout)
-		next_timeout = orphan_timeout;
-	}
+        if (match_is_unconnected_orphan(match))
+	    candidate =	UT_MIN(match_unconnected_orphan_timeout(match),
+			       candidate);
+	else if (match_is_stale(match))
+	    candidate = UT_MIN(match_stale_timeout(match), candidate);
     }
 
-    return next_timeout;
+    return candidate;
 }
 
-void sub_purge_orphans(struct sub *sub, double now)
+void sub_process_timeout(struct sub *sub, double now)
 {
     struct match *match = LIST_FIRST(&sub->matches);
     while (match != NULL) {
 	struct match *next = LIST_NEXT(match, entry);
-	match_purge_orphan(match, now, sub->match_cb, sub->user);
-	check_disappearence(sub, match);
+
+	match_purge_unconnected_orphan(match, now, app_match, sub);
+
+	check_stale(sub, match, now);
+
 	match = next;
     }
 }

@@ -165,20 +165,22 @@ struct sub *sd_get_sub(struct sd *sd, int64_t sub_id)
 int sd_report_match(struct sd *sd, int64_t source_id, int64_t sub_id,
 		    enum paf_match_type match_type, int64_t service_id,
 		    const int64_t *generation, const struct paf_props *props,
-		    const int64_t *ttl, const double *orphan_since)
+		    const int64_t *ttl, const double *orphan_since,
+		    double now)
 {
     struct sub *sub = sd_get_sub(sd, sub_id);
     assert(sub != NULL);
 
     return sub_report_match(sub, source_id, match_type, service_id, generation,
-			    props, ttl, orphan_since);
+			    props, ttl, orphan_since, now);
 }
 
-void sd_orphan_all_from_source(struct sd *sd, int64_t source_id, double now)
+void sd_report_source_disconnected(struct sd *sd, int64_t source_id,
+				   double now)
 {
     struct sub *sub;
     LIST_FOREACH(sub, &sd->subs, entry)
-	sub_orphan_all_from_source(sub, source_id, now);
+	sub_report_source_disconnected(sub, source_id, now);
 }
 
 struct sd_listener *sd_add_listener(struct sd *sd, sd_listener_cb cb,
@@ -207,39 +209,31 @@ bool sd_has_timeout(struct sd *sd)
     struct sub *sub;
 
     LIST_FOREACH(sub, &sd->subs, entry)
-	if (sub_has_orphan(sub))
+	if (sub_has_timeout(sub))
 	    return true;
 
     return false;
 }
 
-double sd_next_timeout(struct sd *sd)
+double sd_get_timeout(struct sd *sd)
 {
     double candidate = DBL_MAX;
 
     struct sub *sub;
     LIST_FOREACH(sub, &sd->subs, entry) {
-	if (!sub_has_orphan(sub))
-            continue;
-        double t = sub_next_orphan_timeout(sub);
-	if (t < candidate)
-            candidate = t;
+	if (sub_has_timeout(sub))
+	    candidate = UT_MIN(candidate, sub_get_timeout(sub));
     }
 
     return candidate;
 }
 
-static void purge_orphans(struct sd *sd, double now)
+void sd_process(struct sd *sd, double now)
 {
     struct sub *sub;
 
     LIST_FOREACH(sub, &sd->subs, entry)
-        sub_purge_orphans(sub, now);
-}
-
-void sd_process(struct sd *sd, double now)
-{
-    purge_orphans(sd, now);
+        sub_process_timeout(sub, now);
 }
 
 void sd_destroy(struct sd *sd)

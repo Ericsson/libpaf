@@ -40,15 +40,14 @@ int sub_report_match(struct sub *sub, int64_t source_id,
 		     enum paf_match_type match_type,
 		     int64_t service_id, const int64_t *generation,
 		     const struct paf_props *props, const int64_t *ttl,
-		     const double *orphan_since);
+		     const double *orphan_since, double now);
 
-void sub_orphan_all_from_source(struct sub *sub, int64_t source_id,
-				double since);
+void sub_report_source_disconnected(struct sub *sub, int64_t source_id,
+				    double since);
 
-bool sub_has_orphan(struct sub *sub);
-double sub_next_orphan_timeout(struct sub *sub);
-
-void sub_purge_orphans(struct sub *sub, double now);
+bool sub_has_timeout(struct sub *sub);
+double sub_get_timeout(struct sub *sub);
+void sub_process_timeout(struct sub *sub, double now);
 
 void sub_destroy(struct sub *sub);
 

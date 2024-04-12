@@ -7,8 +7,9 @@
 
 #include "utest.h"
 
-#include "util.h"
 #include "sub.h"
+#include "testutil.h"
+#include "util.h"
 
 TESTSUITE(sub, NULL, NULL)
 
@@ -108,6 +109,8 @@ TESTCASE(sub, single_source_matches)
 {
     const int64_t sub_id = 99;
 
+    double now = 99e9;
+
     struct umatch_list match_list = { .len = 0 };
     struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
 				 &match_list);
@@ -121,7 +124,7 @@ TESTCASE(sub, single_source_matches)
     paf_props_add_str(props, "name", "foo");
 
     sub_report_match(sub, source_id, paf_match_type_appeared, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
 
     CHKINTEQ(match_list.len, 1);
     CHK(umatch_equal(match_list.matches[0], paf_match_type_appeared,
@@ -130,16 +133,16 @@ TESTCASE(sub, single_source_matches)
     paf_props_add_str(props, "name", "foo2");
     generation++;
     sub_report_match(sub, source_id, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
 
     CHKINTEQ(match_list.len, 2);
     CHK(umatch_equal(match_list.matches[1], paf_match_type_modified,
-                    service_id, props));
+		     service_id, props));
 
     paf_props_add_int64(props, "adsf", 99);
     generation++;
     sub_report_match(sub, source_id, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
 
     CHKINTEQ(match_list.len, 3);
     CHK(umatch_equal(match_list.matches[2], paf_match_type_modified,
@@ -147,13 +150,13 @@ TESTCASE(sub, single_source_matches)
 
     /* same generation -> no change */
     sub_report_match(sub, source_id, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
     CHKINTEQ(match_list.len, 3);
 
     /* older generation -> no change */
     generation--;
     sub_report_match(sub, source_id, paf_match_type_modified, service_id,
-		     &generation, props, & ttl, NULL);
+		     &generation, props, & ttl, NULL, now);
     CHKINTEQ(match_list.len, 3);
 
 
@@ -171,9 +174,10 @@ TESTCASE(sub, disappeared)
     struct umatch_list match_list = { .len = 0 };
     struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
 				 &match_list);
+    double now = 1231231;
 
-    int64_t source_id_0 = 0;
-    int64_t source_id_1 = 1;
+    int64_t source_id0 = 0;
+    int64_t source_id1 = 1;
     const int64_t service_id = 17;
     int64_t generation = 234;
     int64_t ttl_value = 60;
@@ -183,22 +187,22 @@ TESTCASE(sub, disappeared)
     struct paf_props *props = paf_props_create();
     paf_props_add_str(props, "name", "foo");
 
-    sub_report_match(sub, source_id_0, paf_match_type_appeared, service_id,
-		     &generation, props, ttl, orphan_since);
+    sub_report_match(sub, source_id0, paf_match_type_appeared, service_id,
+		     &generation, props, ttl, orphan_since, now);
     CHKINTEQ(match_list.len, 1);
     CHK(umatch_equal(match_list.matches[0], paf_match_type_appeared,
                     service_id, props));
 
-    sub_report_match(sub, source_id_1, paf_match_type_appeared, service_id,
-		     &generation, props, ttl, orphan_since);
+    sub_report_match(sub, source_id1, paf_match_type_appeared, service_id,
+		     &generation, props, ttl, orphan_since, now);
     CHKINTEQ(match_list.len, 1);
 
-    sub_report_match(sub, source_id_1, paf_match_type_disappeared, service_id,
-		     NULL, NULL, NULL, NULL);
+    sub_report_match(sub, source_id1, paf_match_type_disappeared, service_id,
+		     NULL, NULL, NULL, NULL, now);
     CHKINTEQ(match_list.len, 1);
 
-    sub_report_match(sub, source_id_0, paf_match_type_disappeared, service_id,
-		     NULL, NULL, NULL, NULL);
+    sub_report_match(sub, source_id0, paf_match_type_disappeared, service_id,
+		     NULL, NULL, NULL, NULL, now);
     CHKINTEQ(match_list.len, 2);
     CHK(umatch_equal(match_list.matches[1], paf_match_type_disappeared,
 		     service_id, NULL));
@@ -222,21 +226,79 @@ TESTCASE(sub, old_modify)
     const int64_t service_id = 17;
     int64_t generation = 100;
     int64_t ttl = 60;
+    double now = 123123123;
 
     struct paf_props *props = paf_props_create();
 
     sub_report_match(sub, source_id, paf_match_type_appeared, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
     CHKINTEQ(count, 1);
 
     generation--;
     paf_props_add_str(props, "name", "foo");
     sub_report_match(sub, source_id, paf_match_type_appeared, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
     CHKINTEQ(count, 1);
 
     sub_destroy(sub);
     paf_props_destroy(props);
+
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(sub, modify_disappeared)
+{
+    const int64_t sub_id = 99;
+
+    int count = 0;
+    struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_counter,
+				 &count);
+
+    int64_t source_id0 = 0;
+    int64_t generation0 = 100;
+    int64_t source_id1 = 1;
+    int64_t generation1 = 100;
+    const int64_t service_id = 17;
+    int64_t ttl = 60;
+    double now = 10e9;
+
+    struct paf_props *first_props = paf_props_create();
+    struct paf_props *second_props = paf_props_create();
+    paf_props_add_str(second_props, "name", "foo");
+
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			      service_id, &generation0, first_props, &ttl,
+			      NULL, now));
+    CHKINTEQ(count, 1);
+
+    generation0++;
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_modified,
+			      service_id, &generation0, second_props, &ttl,
+			      NULL, now));
+    CHKINTEQ(count, 2);
+
+    CHKNOERR(sub_report_match(sub, source_id1, paf_match_type_appeared,
+			      service_id, &generation1, first_props, &ttl,
+			      NULL, now));
+    CHKINTEQ(count, 2);
+
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_disappeared,
+			      service_id, NULL, NULL, NULL, NULL, now + 1));
+    CHKINTEQ(count, 3);
+
+    generation1++;
+    CHKNOERR(sub_report_match(sub, source_id1, paf_match_type_modified,
+			      service_id, &generation1, second_props,
+			      &ttl, NULL, now + 1));
+    CHKINTEQ(count, 3);
+
+    CHKNOERR(sub_report_match(sub, source_id1, paf_match_type_disappeared,
+			      service_id, NULL, NULL, NULL, NULL, now + 1));
+    CHKINTEQ(count, 3);
+
+    sub_destroy(sub);
+    paf_props_destroy(first_props);
+    paf_props_destroy(second_props);
 
     return UTEST_SUCCESS;
 }
@@ -253,17 +315,18 @@ TESTCASE(sub, ttl_change_unnoticed)
     const int64_t service_id = 17;
     int64_t generation = 100;
     int64_t ttl = 60;
+    double now = 999999;
 
     struct paf_props *props = paf_props_create();
 
     sub_report_match(sub, source_id, paf_match_type_appeared, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
     CHKINTEQ(count, 1);
 
     ttl++;
     generation += 10;
     sub_report_match(sub, source_id, paf_match_type_appeared, service_id,
-		     &generation, props, &ttl, NULL);
+		     &generation, props, &ttl, NULL, now);
     CHKINTEQ(count, 1);
 
     sub_destroy(sub);
@@ -272,52 +335,43 @@ TESTCASE(sub, ttl_change_unnoticed)
     return UTEST_SUCCESS;
 }
 
-TESTCASE(sub, orphan)
+TESTCASE(sub, errornous_match_reporting)
 {
     const int64_t sub_id = 99;
 
     struct umatch_list match_list = { .len = 0 };
     struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
 				 &match_list);
-    int64_t source_id_0 = 0;
-    int64_t source_id_1 = 1;
+    int64_t source_id0 = 123;
+    int64_t source_id1 = 456;
     const int64_t service_id = 17;
     int64_t generation = 0;
     int64_t ttl = 60;
+    double now = 99e99;
 
     struct paf_props *props = paf_props_create();
 
-    sub_report_match(sub, source_id_0, paf_match_type_appeared, service_id,
-		     &generation, props, &ttl, NULL);
+    /* modified before appeared */
+    CHKINTEQ(sub_report_match(sub, source_id0, paf_match_type_modified,
+			      service_id, &generation, props, &ttl, NULL,
+			      now), -1);
+    CHKINTEQ(match_list.len, 0);
+
+    /* disappear before appeared */
+    CHKINTEQ(sub_report_match(sub, source_id1, paf_match_type_disappeared,
+			      service_id, NULL, NULL, NULL, NULL, now), -1);
+    CHKINTEQ(match_list.len, 0);
+
+    /* after failed calls, a proper report should be accepted */
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl, NULL, now));
     CHKINTEQ(match_list.len, 1);
 
-    CHK(!sub_has_orphan(sub));
-
-    double orphan_since = 99e99;
-    sub_report_match(sub, source_id_0, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, &orphan_since);
+    generation++;
+    /* appeared twice */
+    CHKERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			    service_id, &generation, props, &ttl, NULL, now));
     CHKINTEQ(match_list.len, 1);
-    CHK(sub_has_orphan(sub));
-
-    sub_report_match(sub, source_id_0, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, NULL);
-    CHKINTEQ(match_list.len, 1);
-    CHK(!sub_has_orphan(sub));
-
-    sub_report_match(sub, source_id_1, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, NULL);
-    CHKINTEQ(match_list.len, 1);
-    CHK(!sub_has_orphan(sub));
-
-    sub_report_match(sub, source_id_0, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, &orphan_since);
-    CHKINTEQ(match_list.len, 1);
-    CHK(!sub_has_orphan(sub));
-
-    sub_report_match(sub, source_id_1, paf_match_type_modified, service_id,
-		     &generation, props, &ttl, &orphan_since);
-    CHKINTEQ(match_list.len, 1);
-    CHK(sub_has_orphan(sub));
 
     clear_matches(&match_list);
     sub_destroy(sub);
@@ -326,68 +380,258 @@ TESTCASE(sub, orphan)
     return UTEST_SUCCESS;
 }
 
-TESTCASE(sub, purge_orphans)
+int run_afk_rejoin(bool connected)
 {
     const int64_t sub_id = 99;
 
     struct umatch_list match_list = { .len = 0 };
     struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
 				 &match_list);
-    int64_t source_id = 0;
+    int64_t source_id = 123;
+    const int64_t service_id = 17;
+    int64_t generation = 0;
+    int64_t ttl = 60;
+    double now = 100;
 
-    const int64_t service_id_parented = 424242;
-    int64_t ttl_parented = 60;
+    struct paf_props *props = paf_props_create();
 
-    const int64_t service_id_old = 99;
+    CHKNOERR(sub_report_match(sub, source_id, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl, NULL, now));
+    CHKINTEQ(match_list.len, 1);
+
+    now += 10;
+
+    if (connected)
+	CHKNOERR(sub_report_match(sub, source_id, paf_match_type_modified,
+				  service_id, &generation, props, &ttl,
+				  &now, now));
+    else
+	sub_report_source_disconnected(sub, source_id, now);
+
+    CHKINTEQ(match_list.len, 1);
+
+    now += (ttl + 1);
+
+    if (connected)
+	CHKNOERR(sub_report_match(sub, source_id, paf_match_type_disappeared,
+				  service_id, NULL, NULL, NULL, NULL, now));
+
+    sub_process_timeout(sub, now);
+
+    CHKINTEQ(match_list.len, 2);
+
+    now++;
+    CHKNOERR(sub_report_match(sub, source_id, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl, NULL,
+			      now));
+    CHKINTEQ(match_list.len, 3);
+
+    /* stale match source processing */
+    now += 1000;
+    sub_process_timeout(sub, now);
+
+    CHKINTEQ(match_list.len, 3);
+
+    clear_matches(&match_list);
+    sub_destroy(sub);
+    paf_props_destroy(props);
+
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(sub, server_afk)
+{
+    return run_afk_rejoin(false);
+}
+
+TESTCASE(sub, provider_client_afk)
+{
+    return run_afk_rejoin(true);
+}
+
+TESTCASE(sub, ignore_old_match_reports)
+{
+    const int64_t sub_id = 99;
+
+    struct umatch_list match_list = { .len = 0 };
+    struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
+				 &match_list);
+    int64_t source_id0 = 10;
+    int64_t source_id1 = 11;
+    int64_t source_id2 = 12;
+    const int64_t service_id = 17;
+    int64_t generation = 20;
+    int64_t ttl = 60;
+    double now = 1;
+
+    struct paf_props *props = paf_props_create();
+
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl, NULL,
+			      now));
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_disappeared,
+			      service_id, NULL, NULL, NULL, NULL, now));
+    CHKINTEQ(match_list.len, 2);
+
+    generation--;
+    CHKNOERR(sub_report_match(sub, source_id1, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl, NULL, now));
+
+    generation++;
+    CHKNOERR(sub_report_match(sub, source_id2, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl, NULL, now));
+
+    CHKINTEQ(match_list.len, 2);
+
+    clear_matches(&match_list);
+    sub_destroy(sub);
+    paf_props_destroy(props);
+
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(sub, unconnected_orphan)
+{
+    const int64_t sub_id = 99;
+
+    struct umatch_list match_list = { .len = 0 };
+    struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
+				 &match_list);
+    int64_t source_id0 = 0;
+    int64_t source_id1 = 1;
+    const int64_t service_id = 17;
+    int64_t generation = 0;
+    int64_t ttl = 60;
+    double now = 99e99;
+
+    struct paf_props *props = paf_props_create();
+
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl, NULL, now));
+    CHKINTEQ(match_list.len, 1);
+
+    CHK(!sub_has_timeout(sub));
+
+    double orphan_since = now;
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_modified,
+			      service_id, &generation, props, &ttl,
+			      &orphan_since, now));
+    CHKINTEQ(match_list.len, 1);
+    CHK(!sub_has_timeout(sub));
+
+    sub_report_source_disconnected(sub, source_id0, now);
+
+    CHK(sub_has_timeout(sub));
+
+    now++;
+
+    CHKNOERR(sub_report_match(sub, source_id1, paf_match_type_appeared,
+			      service_id, &generation, props, &ttl,
+			      NULL, now));
+
+    CHK(!sub_has_timeout(sub));
+
+    CHKNOERR(sub_report_match(sub, source_id1, paf_match_type_modified,
+			      service_id, &generation, props, &ttl,
+			      &orphan_since, now));
+
+    CHK(!sub_has_timeout(sub));
+
+    sub_report_source_disconnected(sub, source_id1, now);
+
+    CHK(sub_has_timeout(sub));
+
+    CHKINTEQ(match_list.len, 1);
+
+    clear_matches(&match_list);
+    sub_destroy(sub);
+    paf_props_destroy(props);
+
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(sub, purge_unconnected_orphans)
+{
+    const int64_t sub_id = 99;
+
+    struct umatch_list match_list = { .len = 0 };
+    struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
+				 &match_list);
+
+    int64_t source_id0 = 10;
+    int64_t source_id1 = 20;
+
+    double now = 50;
+
+    int64_t service_id_old = 1;
     int64_t ttl_old = 30;
-    double orphan_since_old = 30;
+    double orphan_since_old = now - 20;
     double timeout_old = orphan_since_old + ttl_old;
 
-    const int64_t service_id_recent = 42;
+    int64_t service_id_recent = 2;
     int64_t ttl_recent = 25;
-    double orphan_since_recent = 40;
+    double orphan_since_recent = now - 5;
     double timeout_recent = orphan_since_recent + ttl_recent;
+
+    int64_t service_id_connected = 3;
+    int64_t ttl_connected = 30;
+    double orphan_since_connected = now - 15;
 
     int64_t generation = 10000;
 
     struct paf_props *props = paf_props_create();
 
-    sub_report_match(sub, source_id, paf_match_type_appeared,
-		     service_id_parented, &generation, props, &ttl_parented,
-		     NULL);
-    CHKINTEQ(match_list.len, 1);
-    sub_purge_orphans(sub, DBL_MAX);
-    CHKINTEQ(match_list.len, 1);
+    CHK(!sub_has_timeout(sub));
 
-    sub_report_match(sub, source_id, paf_match_type_appeared,
-		     service_id_old, &generation, props,
-		     &ttl_old, &orphan_since_old);
-    CHKINTEQ(match_list.len, 2);
-    sub_purge_orphans(sub, timeout_old-1);
-    CHKINTEQ(match_list.len, 2);
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			      service_id_old, &generation, props,
+			      &ttl_old, &orphan_since_old, now));
 
-    sub_report_match(sub, source_id, paf_match_type_appeared,
-		     service_id_recent, &generation, props, &ttl_recent,
-		     &orphan_since_recent);
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			      service_id_recent, &generation, props,
+			      &ttl_recent, NULL, now));
+    generation++;
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_modified,
+			      service_id_recent, &generation, props,
+			      &ttl_recent, &orphan_since_recent, now));
+
+    CHKNOERR(sub_report_match(sub, source_id0, paf_match_type_appeared,
+			      service_id_connected, &generation, props,
+			      &ttl_connected, &orphan_since_connected, now));
+    CHKNOERR(sub_report_match(sub, source_id1, paf_match_type_appeared,
+			      service_id_connected, &generation, props,
+			      &ttl_connected, &orphan_since_connected, now));
+
     CHKINTEQ(match_list.len, 3);
-    sub_purge_orphans(sub, timeout_old-1);
+
+    CHK(!sub_has_timeout(sub));
+
+    sub_report_source_disconnected(sub, source_id0, now);
+
+    CHK(sub_has_timeout(sub));
+
+    sub_process_timeout(sub, now);
+
     CHKINTEQ(match_list.len, 3);
 
-    CHKDBLAPPROXEQ(sub_next_orphan_timeout(sub), timeout_old);
+    CHK(sub_has_timeout(sub));
+    CHKDBLAPPROXEQ(sub_get_timeout(sub), timeout_old);
 
-    sub_purge_orphans(sub, timeout_old+1);
+    sub_process_timeout(sub, timeout_old + 1);
     CHKINTEQ(match_list.len, 4);
-    CHK(umatch_equal(match_list.matches[3], paf_match_type_disappeared,
-		     service_id_old, NULL));
 
-    CHKDBLAPPROXEQ(sub_next_orphan_timeout(sub), timeout_recent);
+    CHKDBLAPPROXEQ(sub_get_timeout(sub), timeout_recent);
 
-    sub_purge_orphans(sub, timeout_recent+1);
+    sub_process_timeout(sub, timeout_recent + 1);
     CHKINTEQ(match_list.len, 5);
-    CHK(umatch_equal(match_list.matches[4], paf_match_type_disappeared,
-		     service_id_recent, NULL));
 
-    CHK(!sub_has_orphan(sub));
+    CHK(sub_has_timeout(sub));
+
+    /* stale timeouts */
+    double timeout = sub_get_timeout(sub);
+    sub_process_timeout(sub, timeout);
+
+    CHKINTEQ(match_list.len, 5);
 
     clear_matches(&match_list);
     sub_destroy(sub);
@@ -418,23 +662,33 @@ TESTCASE(sub, purge_many)
     int i;
     for (i = 0; i < MANY; i++) {
 	int64_t service_id = base_service_id + i;
-	sub_report_match(sub, source_id, paf_match_type_appeared, service_id,
-			 &generation, props, &ttl, &orphan_since);
+	double *orphan_since_ptr = tu_randbool() ? &orphan_since : NULL;
+	CHKNOERR(sub_report_match(sub, source_id, paf_match_type_appeared,
+				  service_id, &generation, props, &ttl,
+				  orphan_since_ptr, orphan_since));
 	CHKINTEQ(count, i+1);
     }
 
     count = 0;
 
-    sub_purge_orphans(sub, orphan_timeout - 1);
+    sub_report_source_disconnected(sub, source_id, orphan_since);
+
+    sub_process_timeout(sub, orphan_timeout - 1);
     CHKINTEQ(count, 0);
 
-    sub_purge_orphans(sub, orphan_timeout + 0.1);
+    sub_process_timeout(sub, orphan_timeout + 0.1);
     CHKINTEQ(count, MANY);
 
     /* Local and remote server orphan cleanup is a race, so you may
        get stray disappear notifications. */
-    sub_report_match(sub, source_id, paf_match_type_disappeared,
-		     base_service_id, NULL, NULL, NULL, NULL);
+    CHKNOERR(sub_report_match(sub, source_id, paf_match_type_disappeared,
+			      base_service_id, NULL, NULL, NULL, NULL,
+			      orphan_since + 1));
+    CHKINTEQ(count, MANY);
+
+    /* process stale */
+    sub_process_timeout(sub, orphan_timeout + 1000);
+
     CHKINTEQ(count, MANY);
 
     sub_destroy(sub);
@@ -451,6 +705,7 @@ TESTCASE(sub, orphan_from_source)
     struct sub *sub = sub_create(sub_id, NULL, DUMMY_LOG_REF, match_recorder,
 				 &match_list);
 
+    double now = 2342334.4;
     int64_t source_id_leaving = 99;
     int64_t source_id_staying = 100;
 
@@ -469,26 +724,26 @@ TESTCASE(sub, orphan_from_source)
     for (i = 0; i < num_service_ids; i++) {
 	sub_report_match(sub, source_id_leaving, paf_match_type_appeared,
 			 service_ids_leaving[i], &generation, props, &ttl,
-			 NULL);
+			 NULL, now);
 	sub_report_match(sub, source_id_staying, paf_match_type_appeared,
 			 ut_rand_id(), &generation, props, &ttl,
-			 NULL);
+			 NULL, now);
     }
 
     CHKINTEQ(match_list.len, num_service_ids * 2);
-    sub_purge_orphans(sub, DBL_MAX);
+    sub_process_timeout(sub, DBL_MAX);
     CHKINTEQ(match_list.len, num_service_ids * 2);
 
     double orphan_since = 234234.4;
     double orphan_timeout = orphan_since + ttl;
 
-    sub_orphan_all_from_source(sub, source_id_leaving, orphan_since);
+    sub_report_source_disconnected(sub, source_id_leaving, orphan_since);
 
     CHKINTEQ(match_list.len, num_service_ids * 2);
-    sub_purge_orphans(sub, orphan_timeout - 0.1);
+    sub_process_timeout(sub, orphan_timeout - 0.1);
     CHKINTEQ(match_list.len, num_service_ids * 2);
 
-    sub_purge_orphans(sub, orphan_timeout + 0.1);
+    sub_process_timeout(sub, orphan_timeout + 0.1);
     CHKINTEQ(match_list.len, num_service_ids * 3);
     CHK(match_list.matches[num_service_ids * 2]->match_type ==
 	paf_match_type_disappeared);
@@ -502,5 +757,10 @@ TESTCASE(sub, orphan_from_source)
     sub_destroy(sub);
     paf_props_destroy(props);
 
+    return UTEST_SUCCESS;
+}
+
+TESTCASE(sub, stale_timeout)
+{
     return UTEST_SUCCESS;
 }

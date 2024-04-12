@@ -156,7 +156,7 @@ static void conf_sd_tmo(struct paf_context *ctx)
     ptimer_cancel(ctx->rt_timer, &ctx->sd_tmo);
 
     if (sd_has_timeout(ctx->sd)) {
-	double abs_tmo = sd_next_timeout(ctx->sd);
+	double abs_tmo = sd_get_timeout(ctx->sd);
 	assert(abs_tmo >= 0);
 
 	log_ctx_sd_timeout(ctx, ctx->rt_timer->clk_id, abs_tmo);

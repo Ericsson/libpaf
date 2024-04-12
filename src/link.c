@@ -79,8 +79,8 @@ static void untie_from_sd(struct link *link)
 	sd_remove_listener(link->sd, link->listener);
 	link->listener = NULL;
     }
-    sd_orphan_all_from_source(link->sd, link->link_id,
-			      ut_ftime(CLOCK_REALTIME));
+    double now = ut_ftime(CLOCK_REALTIME);
+    sd_report_source_disconnected(link->sd, link->link_id, now);
 }
 
 static void handle_error(struct link *link);
@@ -345,9 +345,11 @@ static void subscribe_notify_cb(int64_t ta_id, enum paf_match_type match_type,
 	return;
     }
 
+    double now = ut_ftime(CLOCK_REALTIME);
+
     if (sd_report_match(link->sd, link->link_id, sub_relay->obj_id,
 			match_type, service_id, generation,
-			props, ttl, orphan_since) < 0)
+			props, ttl, orphan_since, now) < 0)
 	handle_error(link);
 
     server_active(link);
