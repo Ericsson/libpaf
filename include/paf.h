@@ -35,7 +35,7 @@ extern "C" {
  * blocking system calls are made.
  *
  * For a description of the Pathfinder data model, refer to the <a
- * href="https://github.com/Ericsson/paf/blob/master/doc/PROTOCOL.md">
+ * href="https://github.com/Ericsson/paf/blob/master/doc/PROTOCOLv3.md">
  * Pathfinder Protocol Specification</a>. Note: there are important
  * semantical differences between certain operations on the protocol
  * level, compared to this API (e.g., paf_publish() doesn't have the
