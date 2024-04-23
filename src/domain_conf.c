@@ -265,7 +265,8 @@ static struct domain_conf *json_to_conf(const char *filename,
 				   log_ref) < 0)
 	    goto err_free_conf;
 
-	if (proto_version_min > proto_version_max) {
+	if (proto_version_min >= 0 && proto_version_max >= 0 &&
+	    proto_version_min > proto_version_max) {
 	    log_domain_conf_min_version_larger_than_max(log_ref,
 							proto_version_min,
 							proto_version_max);
