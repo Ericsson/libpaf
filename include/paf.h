@@ -112,6 +112,14 @@ extern "C" {
  * "minProtocolVersion" must be equal to or lower than
  * "maxProtocolVersion".
  *
+ * A server object may have a keys "minIdleTime" or "maxIdleTime" to
+ * configure client-side @ref liveness, and override the @c
+ * PAF_IDLE_MIN and @c PAF_IDLE_MAX values and the compile-time
+ * defaults (in case the environment variables are not set).
+ *
+ * If both "minIdleTime" and "maxIdleTime" are set, "minIdleTime" must
+ * be equal to or lower than "maxIdleTime".
+ *
  * A server object may include a key "networkNamespace". If present,
  * the library will make sure the outoing transport layer connection
  * originates from a Linux network namespace named per the key's
@@ -151,7 +159,8 @@ extern "C" {
  *     },
  *     {
  *       "address": "tcp:fqdn:1111",
- *       "networkNamespace": "oam"
+ *       "networkNamespace": "oam",
+ *       "minIdleTime": 10
  *     },
  *     {
  *       "address": "ux:foo"

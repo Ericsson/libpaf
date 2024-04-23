@@ -86,8 +86,9 @@ int ts_write_nl_domains_file(const char *filename, struct server *servers,
 int ts_write_json_domain_file(const char *filename, const char *cert_file,
 			      const char *key_file, const char *tc_file,
 			      const char *crl_file, int64_t proto_version_min,
-			      int64_t proto_version_max,
-			      struct server *servers, size_t num_servers);
+			      int64_t proto_version_max, double idle_min,
+			      double idle_max, struct server *servers,
+			      size_t num_servers);
 
 int ts_domain_setup(unsigned int flags);
 void ts_domain_teardown(void);
@@ -106,5 +107,21 @@ int ts_server_assure_subscription(struct server *server, int64_t sub_id,
 int ts_assure_subscription(int64_t sub_id, const char *filter);
 int ts_assure_supports_v3(void);
 int ts_server_assure_supports_v3(struct server *server);
+
+int ts_server_get_client_ids(struct server *server, int64_t *clients,
+			     size_t capacity);
+
+struct ts_client
+{
+    int64_t client_id;
+    char client_addr[256];
+    int64_t connect_time;
+    double idle;
+    int64_t proto_version;
+    double latency;
+};
+
+int ts_server_get_client(struct server *server, int64_t client_id,
+			 struct ts_client *client);
 
 #endif

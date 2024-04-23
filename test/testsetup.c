@@ -302,8 +302,8 @@ int ts_write_nl_domains_file(const char *filename, struct server *servers,
 int ts_write_json_domain_file(const char *filename, const char *cert_file,
 			      const char *key_file, const char *tc_file,
 			      const char *crl_file, int64_t proto_version_min,
-			      int64_t proto_version_max,
-			      struct server *servers,
+			      int64_t proto_version_max, double idle_min,
+			      double idle_max, struct server *servers,
 			      size_t num_servers)
 {
     FILE *domains_file = fopen(filename, "w");
@@ -353,6 +353,14 @@ int ts_write_json_domain_file(const char *filename, const char *cert_file,
 	    fprintf(domains_file, ",\n"
 		    "      \"maxProtocolVersion\": %"PRId64,
 		    proto_version_max);
+
+	if (idle_min >= 0)
+	    fprintf(domains_file, ",\n"
+		    "      \"minIdleTime\": %f", idle_min);
+
+	if (idle_max >= 0)
+	    fprintf(domains_file, ",\n"
+		    "      \"maxIdleTime\": %f", idle_max);
 
 	fprintf(domains_file, "\n"
 		"    }");
@@ -450,12 +458,12 @@ int ts_domain_setup(unsigned int setup_flags)
 	if (tls_conf) {
 	    if (ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 					  TS_CLIENT_KEY, TS_CLIENT_TC,
-					  NULL, -1, -1, ts_servers,
+					  NULL, -1, -1, -1, -1, ts_servers,
 					  TS_NUM_SERVERS) < 0)
 		return -1;
 	} else {
 	    if (ts_write_json_domain_file(ts_domains_filename, NULL, NULL,
-					  NULL, NULL, -1, -1, ts_servers,
+					  NULL, NULL, -1, -1, -1, -1, ts_servers,
 					  TS_NUM_SERVERS) < 0)
 		return -1;
 	}
@@ -784,4 +792,103 @@ int ts_assure_supports_v3(void)
 	    return rc;
     }
     return 0;
+}
+
+struct list_client_state
+{
+    struct conn *conn;
+    int64_t *clients;
+    int capacity;
+    int count;
+};
+
+static void list_client_cb(int64_t client_id, const char *client_addr,
+			   int64_t connect_time, const double *idle,
+			   const int64_t *proto_version,
+			   const double *latency, void *cb_data)
+{
+    struct list_client_state *state = cb_data;
+
+    if (conn_get_client_id(state->conn) == client_id)
+	return;
+
+    int idx = state->count;
+
+    state->count++;
+
+    if (state->count <= state->capacity)
+	state->clients[idx] = client_id;
+}
+
+int ts_server_get_client_ids(struct server *server, int64_t *clients,
+			     size_t capacity)
+{
+    int rc = -1;
+
+    struct conn *conn = server_connect(server);
+
+    if (conn == NULL)
+	goto out;
+
+    struct list_client_state state = {
+	.conn = conn,
+	.clients = clients,
+	.capacity = capacity
+    };
+
+    if (conn_clients(conn, list_client_cb, &state) < 0)
+	goto out_close;
+
+    return state.count;
+
+out_close:
+    conn_close(conn);
+out:
+    return rc;
+}
+
+static void get_client_cb(int64_t client_id, const char *client_addr,
+			   int64_t connect_time, const double *idle,
+			   const int64_t *proto_version,
+			   const double *latency, void *cb_data)
+{
+    struct ts_client *client = cb_data;
+
+    if (client_id == client->client_id) {
+	strcpy(client->client_addr, client_addr);
+	client->connect_time = connect_time;
+	client->idle = idle != NULL ? *idle : -1;
+	client->proto_version = proto_version != NULL ? *proto_version : -1;
+	client->latency = latency != NULL ? *latency : -1;
+    }
+}
+
+int ts_server_get_client(struct server *server, int64_t client_id,
+			 struct ts_client *client)
+{
+    int rc = -1;
+
+    struct conn *conn = server_connect(server);
+
+    if (conn == NULL)
+	goto out;
+
+    client->client_id = client_id;
+    client->connect_time = -1;
+
+    if (conn_clients(conn, get_client_cb, client) < 0)
+	goto out_close;
+
+    if (client->connect_time < 0) {
+	client->client_id = -1;
+	errno = ENOENT;
+	goto out_close;
+    }
+
+    return 0;
+
+out_close:
+    conn_close(conn);
+out:
+    return rc;
 }

@@ -128,13 +128,15 @@ static bool is_track_querying(struct link *link)
 }
 
 #define IDLE_QUERY_THRESHOLD 0.5
+#define IDLE_QUERY_MAX_JITTER 0.1
 
 static void schedule_idle_query_tmo(struct link *link)
 {
     assert(is_tracking(link) && !is_track_querying(link));
 
     double idle_query_time =
-	ut_jitter(link->max_idle_time * IDLE_QUERY_THRESHOLD, 0.1);
+	ut_jitter(link->max_idle_time * IDLE_QUERY_THRESHOLD,
+		  IDLE_QUERY_MAX_JITTER) + IDLE_QUERY_MAX_JITTER;
 
     ptimer_reschedule_rel(link->timer, idle_query_time, &link->idle_tmo);
 }
@@ -527,16 +529,32 @@ static double lowest_service_ttl(struct link *link)
     return candidate;
 }
 
+static double get_idle_max(struct link *link)
+{
+    if (link->server->idle_max >= 0)
+	return link->server->idle_max;
+    else
+	return conf_get_idle_min();
+}
+
+static double get_idle_min(struct link *link)
+{
+    if (link->server->idle_min >= 0)
+	return link->server->idle_min;
+    else
+	return conf_get_idle_min();
+}
+
 static void adjust_max_idle_time(struct link *link)
 {
     double max_idle_time;
 
     if (LIST_EMPTY(&link->sd->services))
-	max_idle_time = conf_get_idle_max();
+	max_idle_time = get_idle_max(link);
     else {
 	max_idle_time = lowest_service_ttl(link);
-	max_idle_time = UT_MAX(max_idle_time, conf_get_idle_min());
-	max_idle_time = UT_MIN(max_idle_time, conf_get_idle_max());
+	max_idle_time = UT_MAX(max_idle_time, get_idle_min(link));
+	max_idle_time = UT_MIN(max_idle_time, get_idle_max(link));
     }
 
     if (max_idle_time != link->max_idle_time) {
@@ -702,7 +720,7 @@ static void clear_sub_relays(struct link *link)
 static void clear_track(struct link *link)
 {
     link->track_ta_id = -1;
-    link->max_idle_time = conf_get_idle_max();
+    link->max_idle_time = get_idle_max(link);
     link->track_query_ts = -1;
 }
 
@@ -791,11 +809,12 @@ struct link *link_create(int64_t link_id, int64_t client_id,
 	.reconnect_tmo = -1,
 	.idle_tmo = -1,
 	.track_ta_id = -1,
-	.max_idle_time = conf_get_idle_max(),
 	.track_query_ts = -1,
 	.detached_tmo = -1,
 	.log_ref = link_log_ref
     };
+
+    link->max_idle_time = get_idle_max(link);
 
     LIST_INIT(&link->service_relays);
     LIST_INIT(&link->sub_relays);
@@ -865,7 +884,7 @@ static void try_connect(struct link *link)
 
     set_state(link, link_state_greeting);
 
-    double max_greeting_time = conf_get_idle_min();
+    double max_greeting_time = get_idle_min(link);
     link->greeting_tmo = ptimer_schedule_rel(link->timer, max_greeting_time);
 
     conn_hello_nb(link->conn, fail_cb, hello_complete_cb, link);

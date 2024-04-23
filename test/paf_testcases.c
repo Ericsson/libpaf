@@ -711,7 +711,7 @@ static int run_subscription_match(bool force_v2)
 	CHKNOERR(ts_write_json_domain_file(ts_domains_filename,
 					   TS_CLIENT_CERT,
 					   TS_CLIENT_KEY, TS_CLIENT_TC,
-					   NULL, 2, 2, ts_servers,
+					   NULL, 2, 2, -1, -1, ts_servers,
 					   TS_NUM_SERVERS));
 
     struct paf_context *sub_context = paf_attach(ts_domain_name);
@@ -902,7 +902,7 @@ static int test_timeout_ttl(enum timeout_mode mode, int64_t ttl)
 
     do {
         struct paf_context *contexts[] = { pub_context, sub_context };
-        CHKNOERR(wait_for_all(contexts, 2, 0.1));
+        CHKNOERR(wait_for_all(contexts, UT_ARRAY_LEN(contexts), 0.1));
     } while (hits.appeared != 1);
 
     double start = ut_ftime(CLOCK_REALTIME);
@@ -1020,8 +1020,7 @@ TESTCASE(paf, unsubscribe_unsynced)
     CHKNOERR(ts_start_servers());
 
     struct paf_context *contexts[] = { sub_context, pub_context };
-    wait_for_all(contexts, sizeof(contexts)/sizeof(contexts[0]),
-                 MAX_RECONNECT_PERIOD);
+    wait_for_all(contexts, UT_ARRAY_LEN(contexts), MAX_RECONNECT_PERIOD);
 
     CHKINTEQ(hits, 0);
 
@@ -1054,8 +1053,7 @@ TESTCASE(paf, unsubscribe_synced)
     CHK(service_id >= 0);
 
     struct paf_context *contexts[] = { sub_context, pub_context };
-    wait_for_all(contexts, sizeof(contexts)/sizeof(contexts[0]),
-                 MAX_RECONNECT_PERIOD);
+    wait_for_all(contexts, UT_ARRAY_LEN(contexts), MAX_RECONNECT_PERIOD);
 
     CHKINTEQ(hits, 1);
 
@@ -1067,7 +1065,7 @@ TESTCASE(paf, unsubscribe_synced)
 
     CHK(service_id_2 >= 0);
 
-    wait_for_all(contexts, sizeof(contexts)/sizeof(contexts[0]), 0.25);
+    wait_for_all(contexts, UT_ARRAY_LEN(contexts), 0.25);
 
     CHKINTEQ(hits, 1);
 
@@ -1368,7 +1366,7 @@ TESTCASE(paf, change_domain_tls_conf)
 				       TS_UNTRUSTED_CLIENT_CERT,
 				       TS_UNTRUSTED_CLIENT_KEY,
 				       TS_UNTRUSTED_CLIENT_TC, NULL,
-				       -1, -1, &server, 1));
+				       -1, -1, -1, -1, &server, 1));
 
     struct paf_context *context = paf_attach(ts_domain_name);
 
@@ -1385,7 +1383,7 @@ TESTCASE(paf, change_domain_tls_conf)
 
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 				       TS_CLIENT_KEY, TS_CLIENT_TC, NULL,
-				       -1, -1, &server, 1));
+				       -1, -1, -1, -1, &server, 1));
 
     CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
 
@@ -1419,7 +1417,8 @@ static int run_certificate_revocation(bool after_rescan)
     if (after_rescan) {
 	CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 					   TS_CLIENT_KEY, TS_CLIENT_TC,
-					   TS_EMPTY_CRL, -1, -1, &server, 1));
+					   TS_EMPTY_CRL, -1, -1, -1, -1,
+					   &server, 1));
 
 	context = paf_attach(ts_domain_name);
 
@@ -1429,7 +1428,7 @@ static int run_certificate_revocation(bool after_rescan)
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, TS_CLIENT_CERT,
 				       TS_CLIENT_KEY, TS_CLIENT_TC,
 				       TS_REVOKED_SERVER_CERT_CRL, -1, -1,
-				       &server, 1));
+				       -1, -1, &server, 1));
 
     if (after_rescan)
 	CHKNOERR(wait_for(context, MAX_RESCAN_PERIOD));
@@ -1536,6 +1535,97 @@ TESTCASE_F(paf, reconnect, REQUIRE_NO_LOCAL_PORT_BIND)
     return UTEST_SUCCESS;
 }
 
+static int run_domain_file_idle_conf(bool test_min)
+{
+    REQUIRE_NOT_IN_VALGRIND;
+
+    CHKNOERR(ts_start_servers());
+
+    if (ts_assure_supports_v3() < 0) {
+	ts_stop_servers();
+	return UTEST_NOT_RUN;
+    }
+
+    double idle_min;
+    double idle_max;
+    double query_interval;
+
+    unsetenv("PAF_IDLE_MIN");
+    unsetenv("PAF_IDLE_MAX");
+    unsetenv("PAF_TTL");
+
+    if (test_min) {
+	idle_min = 3;
+	idle_max = tu_randbool() ? 100 : -1;
+	query_interval = idle_min / 2;
+    } else {
+	idle_min = tu_randbool() ? 1 : -1;
+	idle_max = 3;
+	query_interval = idle_max / 2;
+    }
+
+    CHKNOERR(ts_write_json_domain_file(ts_domains_filename,
+				       TS_CLIENT_CERT,
+				       TS_CLIENT_KEY, TS_CLIENT_TC,
+				       NULL, -1, -1, idle_min, idle_max,
+				       ts_servers, TS_NUM_SERVERS));
+
+    struct paf_context *context = paf_attach(ts_domain_name);
+
+    struct paf_props *props = paf_props_create();
+
+    paf_props_add_str(props, "name", "foo");
+
+    int64_t service_id = paf_publish(context, props);
+
+    if (test_min)
+	paf_set_ttl(context, service_id, 0);
+    else
+	paf_set_ttl(context, service_id, 30);
+
+    CHKNOERR(wait_for_service(context, MAX_RECONNECT_PERIOD, service_id,
+			      props));
+
+    paf_props_destroy(props);
+
+    struct server *server = &ts_servers[0];
+    int64_t client_id;
+
+    CHKINTEQ(ts_server_get_client_ids(server, &client_id, 1), 1);
+
+    struct ts_client client;
+
+    CHKNOERR(ts_server_get_client(server, client_id, &client));
+    CHK(client.idle >= 0 && client.idle < 0.5);
+
+    CHKNOERR(wait_for(context, query_interval / 2));
+
+    CHKNOERR(ts_server_get_client(server, client_id, &client));
+    CHK(client.idle >= (query_interval / 2));
+
+    double left = query_interval - client.idle;
+    CHKNOERR(wait_for(context, left + 0.25));
+
+    CHKNOERR(ts_server_get_client(server, client_id, &client));
+    CHK(client.idle >= 0 && client.idle < 0.5);
+
+    paf_close(context);
+
+    CHKNOERR(ts_stop_servers());
+    
+    return UTEST_SUCCESS;
+}
+
+TESTCASE_F(paf, domain_file_idle_min, REQUIRE_NO_LOCAL_PORT_BIND)
+{
+    return run_domain_file_idle_conf(true);
+}
+
+TESTCASE_F(paf, domain_file_idle_max, REQUIRE_NO_LOCAL_PORT_BIND)
+{
+    return run_domain_file_idle_conf(false);
+}
+
 #define PROP_COUNT (1000)
 #define NAME_LEN (1000)
 #define VALUE_LEN (1000)
@@ -1613,7 +1703,7 @@ TESTCASE(paf, local_addr)
     CHKNOERR(ts_server_start(&server));
 
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, NULL, NULL, NULL,
-				       NULL, -1, -1, &server, 1));
+				       NULL, -1, -1, -1, 1, &server, 1));
 
     struct paf_context *context = paf_attach(ts_domain_name);
 
@@ -1669,7 +1759,7 @@ TESTCASE(paf, multi_homed_server)
     CHKNOERR(ts_server_start(&server_server));
 
     CHKNOERR(ts_write_json_domain_file(ts_domains_filename, NULL, NULL, NULL,
-				       NULL, -1, -1, &client_server, 1));
+				       NULL, -1, -1, -1, -1, &client_server, 1));
 
     struct paf_context *context = paf_attach(ts_domain_name);
 

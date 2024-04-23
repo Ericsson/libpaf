@@ -14,6 +14,8 @@ struct server_conf
     char *crl_file;
     int proto_version_min;
     int proto_version_max;
+    double idle_min;
+    double idle_max;
 };
 
 struct server_conf *server_conf_create(const char *net_ns,
@@ -24,7 +26,8 @@ struct server_conf *server_conf_create(const char *net_ns,
 				       const char *tc_file,
 				       const char *crl_file,
 				       int proto_version_min,
-				       int proto_version_max);
+				       int proto_version_max,
+				       double idle_min, double idle_max);
 void server_conf_destroy(struct server_conf *server);
 
 bool server_conf_equals(const struct server_conf *server0,

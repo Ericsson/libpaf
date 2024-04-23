@@ -82,9 +82,13 @@
 			  "occurrences in domain file \"%s\".", addr,	\
 			  filename)
 
-#define log_domain_conf_min_version_larger_than_max(domain, min, max)	\
+#define log_domain_conf_min_proto_larger_than_max(domain, min, max)	\
     log_domain_conf_error(domain, "Minimum protocol version (%"PRId64	\
 			  ") is set lower than maximum (%"PRId64 ").",	\
 			  min, max);
+
+#define log_domain_conf_min_idle_larger_than_max(domain, min, max)	\
+    log_domain_conf_error(domain, "Minimum idle time (%f) is set lower " \
+			  "than maximum (%f).", min, max);
 
 #endif

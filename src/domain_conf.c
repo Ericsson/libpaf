@@ -47,7 +47,8 @@ static int add_server(struct domain_conf *conf, const char *filename,
 		      const char *local_addr, const char *cert_file,
 		      const char *key_file, const char *tc_file,
 		      const char *crl_file, int proto_version_min,
-		      int proto_version_max, const char *log_ref)
+		      int proto_version_max, double idle_min,
+		      double idle_max, const char *log_ref)
 {
     char proto[64];
 
@@ -68,7 +69,7 @@ static int add_server(struct domain_conf *conf, const char *filename,
     conf->servers[conf->num_servers] =
 	server_conf_create(net_ns, addr, local_addr, cert_file, key_file,
 			   tc_file, crl_file, proto_version_min,
-			   proto_version_max);
+			   proto_version_max, idle_min, idle_max);
 
     conf->num_servers = new_num_servers;
 
@@ -94,7 +95,7 @@ static struct domain_conf *custom_to_conf(const char *filename,
 
 	if (strlen(start) > 0 && !ut_str_begins_with(start, COMMENT_CHAR)
 	    && add_server(conf, filename, NULL, start, NULL, NULL, NULL, NULL,
-			  NULL, -1, -1, log_ref) < 0) {
+			  NULL, -1, -1, -1, -1, log_ref) < 0) {
 	    domain_conf_destroy(conf);
 	    return NULL;
 	}
@@ -171,6 +172,32 @@ static int get_server_int64_field(const char *filename, json_t* server,
     return 0;
 }
 
+static int get_server_double_field(const char *filename, json_t* server,
+				   const char *name, bool mandantory,
+				   double default_value, double *value,
+				   const char *log_ref)
+{
+    json_t *obj;
+    if (get_server_field(filename, server, name, mandantory, &obj,
+			 log_ref) < 0)
+	return -1;
+
+    if (obj == NULL) {
+	*value = default_value;
+	return 0;
+    }
+
+    if (!json_is_number(obj)) {
+	    log_domain_conf_server_field_wrong_type(log_ref, filename, name,
+						    "number");
+	    return -1;
+    }
+
+    *value = json_number_value(obj);
+
+    return 0;
+}
+
 static bool is_tls_addr(const char *addr)
 {
     return strncmp("tls", addr, 3) == 0 ||
@@ -221,6 +248,8 @@ static struct domain_conf *json_to_conf(const char *filename,
 	const char *crl_file;
 	int64_t proto_version_min;
 	int64_t proto_version_max;
+	double idle_min;
+	double idle_max;
 
 	if (get_server_str_field(filename, server, "networkNamespace", false,
 				 NULL, &net_ns, log_ref) < 0)
@@ -267,15 +296,31 @@ static struct domain_conf *json_to_conf(const char *filename,
 
 	if (proto_version_min >= 0 && proto_version_max >= 0 &&
 	    proto_version_min > proto_version_max) {
-	    log_domain_conf_min_version_larger_than_max(log_ref,
-							proto_version_min,
-							proto_version_max);
+	    log_domain_conf_min_proto_larger_than_max(log_ref,
+						      proto_version_min,
+						      proto_version_max);
+	    goto err_free_conf;
+	}
+
+	if (get_server_double_field(filename, server, "minIdleTime",
+				   false, -1, &idle_min,
+				   log_ref) < 0)
+	    goto err_free_conf;
+
+	if (get_server_double_field(filename, server, "maxIdleTime",
+				    false, -1, &idle_max,
+				    log_ref) < 0)
+	    goto err_free_conf;
+
+	if (idle_min >= 0 && idle_max >= 0 && idle_min > idle_max) {
+	    log_domain_conf_min_idle_larger_than_max(log_ref, idle_min,
+						     idle_max);
 	    goto err_free_conf;
 	}
 
 	if (add_server(conf, filename, net_ns, addr, local_addr, cert_file,
 		       key_file, tc_file, crl_file, proto_version_min,
-		       proto_version_max, log_ref) < 0)
+		       proto_version_max, idle_min, idle_max, log_ref) < 0)
 	    goto err_free_conf;
     }
 
