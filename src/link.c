@@ -536,6 +536,7 @@ static void adjust_max_idle_time(struct link *link)
     else {
 	max_idle_time = lowest_service_ttl(link);
 	max_idle_time = UT_MAX(max_idle_time, conf_get_idle_min());
+	max_idle_time = UT_MIN(max_idle_time, conf_get_idle_max());
     }
 
     if (max_idle_time != link->max_idle_time) {
