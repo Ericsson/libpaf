@@ -534,7 +534,7 @@ static double get_idle_max(struct link *link)
     if (link->server->idle_max >= 0)
 	return link->server->idle_max;
     else
-	return conf_get_idle_min();
+	return conf_get_idle_max();
 }
 
 static double get_idle_min(struct link *link)
