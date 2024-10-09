@@ -84,6 +84,7 @@ static void service_appeared(struct match *match, int64_t service_id,
 
     match->service_id = service_id;
     match->service_generation = generation;
+    paf_props_destroy(match->service_props);
     match->service_props = paf_props_clone(props);
     match->service_ttl = ttl;
 
