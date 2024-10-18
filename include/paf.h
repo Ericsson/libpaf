@@ -23,7 +23,7 @@ extern "C" {
  *
  * @author Mattias Rönnblom
  * @version 0.1 [API]
- * @version 1.1.10 [Implementation]
+ * @version 1.1.11 [Implementation]
  *
  * @section overview Overview
  *
