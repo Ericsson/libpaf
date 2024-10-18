@@ -22,6 +22,7 @@ def usage(name):
     print("%s [-c <cmd>] <release-sha|release-tag>" % name)
     print("Options:")
     print("  -c <cmd>  Run command <cmd>. Default is to run all.")
+    print("  -m        Run test suite in valgrind memcheck.")
     print("  -h        Print this text.")
     print("Commands:")
     print("  meta     Only check release meta data.")
@@ -395,11 +396,15 @@ def run_test(repo, conf, release_commit):
     temp_dir.cleanup()
 
 
-def run_tests(repo, release_commit):
+def run_tests(repo, release_commit, use_valgrind):
 
     test_build_separate_build_dir(repo, release_commit)
 
-    run_test(repo, "", release_commit)
+    conf = []
+    if use_valgrind:
+        conf.append("--enable-valgrind")
+
+    run_test(repo, " ".join(conf), release_commit)
 
 
 def check_repo(repo):
@@ -410,13 +415,16 @@ def check_repo(repo):
 optlist, args = getopt.getopt(sys.argv[1:], 'c:mh')
 
 cmd = None
+use_valgrind = False
 
 for opt, optval in optlist:
     if opt == '-h':
         usage(sys.argv[0])
         sys.exit(0)
-    if opt == '-c':
+    elif opt == '-c':
         cmd = optval
+    elif opt == '-m':
+        use_valgrind = True
 
 if len(args) != 1:
     usage(sys.argv[0])
@@ -455,4 +463,4 @@ if changes:
 if abi:
     check_abi(repo, release_commit)
 if test:
-    run_tests(repo, release_commit)
+    run_tests(repo, release_commit, use_valgrind)
