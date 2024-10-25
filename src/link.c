@@ -638,6 +638,8 @@ static void uninstall_service_relay(struct link *link, int64_t service_id)
 
     switch (service_relay->state) {
     case relay_state_unsynced:
+	LIST_REMOVE(service_relay, entry);
+	relay_destroy(service_relay);
 	break;
     case relay_state_syncing:
 	service_relay->pending_unsync = true;
@@ -693,6 +695,8 @@ static void uninstall_sub_relay(struct link *link, int64_t sub_id)
 
     switch (sub_relay->state) {
     case relay_state_unsynced:
+	LIST_REMOVE(sub_relay, entry);
+	relay_destroy(sub_relay);
 	break;
     case relay_state_syncing:
 	sub_relay->pending_unsync = true;
