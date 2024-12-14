@@ -23,6 +23,9 @@
 #define log_link_query_timeout(link)			\
     log_link_debug(link, "Server query timed out.")
 
+#define log_link_track_accept_timeout(link)			\
+    log_link_debug(link, "Server failed to accept track request in time.")
+
 #define log_link_idle_time_changed(link, max_idle_time)			\
     log_link_debug(link, "Maximum idle time was adjusted to %.0f s.",	\
 		   max_idle_time)
@@ -33,6 +36,9 @@
 #define log_link_track_reply(link, latency)				\
     log_link_debug(link, "Received server track reply in %d ms.",	\
 		   (latency) * 1e3)
+
+#define log_link_track_accepted(link)		\
+    log_link_debug(link, "Track transaction accepted.")
 
 #define log_link_track_unsolicited_reply(link)				\
     log_link_debug(link, "Received unsolicited server track reply.")

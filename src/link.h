@@ -75,6 +75,7 @@ struct link
 
     int64_t idle_tmo;
     int64_t track_ta_id;
+    bool track_accepted;
     double max_idle_time;
     double track_query_ts;
 

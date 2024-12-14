@@ -201,22 +201,38 @@ static void track_notify_cb(int64_t ta_id, bool is_query, void *cb_data)
     server_active(link);
 }
 
-static void track_complete_cb(int64_t ta_id UT_UNUSED, void *cb_data)
+static void track_complete_cb(int64_t ta_id, void *cb_data)
 {
     struct link *link = cb_data;
 
     log_link_track_completed(link);
 
+    assert(link->track_ta_id == ta_id);
+
     link->track_ta_id = -1;
+    link->track_accepted = false;
+
     handle_error(link);
+}
+
+static void track_accept_cb(int64_t ta_id, void *cb_data)
+{
+    struct link *link = cb_data;
+
+    log_link_track_accepted(link);
+
+    assert(link->track_ta_id == ta_id);
+
+    link->track_accepted = true;
 }
 
 static void configure_idle_tracking(struct link *link)
 {
     if (conn_is_track_supported(link->conn)) {
 	link->track_ta_id =
-	    conn_track_nb(link->conn, fail_cb, NULL, track_notify_cb,
-			  track_complete_cb, link);
+	    conn_track_nb(link->conn, fail_cb, track_accept_cb,
+			  track_notify_cb, track_complete_cb, link);
+	link->track_accepted = false;
 
 	schedule_idle_query_tmo(link);
     }
@@ -925,11 +941,18 @@ static void check_idle(struct link *link)
     if (is_track_querying(link)) {
 	log_link_query_timeout(link);
 	handle_error(link);
-    } else {
-	conn_track_inform(link->conn, link->track_ta_id, true);
-	link->track_query_ts = ut_ftime(CLOCK_MONOTONIC);
-	schedule_idle_reply_tmo(link);
+	return;
     }
+
+    if (!link->track_accepted) {
+	log_link_track_accept_timeout(link);
+	handle_error(link);
+	return;
+    }
+
+    conn_track_inform(link->conn, link->track_ta_id, true);
+    link->track_query_ts = ut_ftime(CLOCK_MONOTONIC);
+    schedule_idle_reply_tmo(link);
 }
 
 static void try_sync_services(struct link *link)
