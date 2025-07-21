@@ -22,6 +22,8 @@ Dependencies:
 * libjansson
 * libxcm 1.5.0 or later (i.e., API version 0.20 or higher)
 * Automake
+
+Additionally, the 'lpafc' command-line tool depend on:
 * GNU readline
 
 To build and install libpaf, run:
