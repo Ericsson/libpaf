@@ -32,22 +32,22 @@ AC_CHECK_PROG(HAVE_PDFLATEX, pdflatex, yes, no)
 
 AM_CONDITIONAL(PDFLATEX, [test x$HAVE_PDFLATEX = xyes])
 
-AC_CHECK_FUNC(getentropy, [],
+AC_CHECK_FUNC([getentropy], [],
              [AC_MSG_ERROR([glibc 2.25 or later is required.])])
 
-AC_CHECK_HEADERS(xcm.h xcm_version.h, [],
+AC_CHECK_HEADERS([xcm.h xcm_version.h], [],
                  [AC_MSG_ERROR([Unable to find XCM header files.])])
-AC_CHECK_LIB(xcm, xcm_connect, [],
+AC_CHECK_LIB([xcm], [xcm_connect], [AC_SUBST([XCM_LIBS], [-lxcm])],
              [AC_MSG_ERROR([Unable to find the XCM library.])])
 
-AC_CHECK_HEADERS(jansson.h, [],
+AC_CHECK_HEADERS([jansson.h], [],
                  [AC_MSG_ERROR([Unable to find Jansson header files.])])
-AC_CHECK_LIB(jansson, json_loads, [],
+AC_CHECK_LIB([jansson], [json_loads], [AC_SUBST([JANSSON_LIBS], [-ljansson])],
              [AC_MSG_ERROR([Unable to find the Jansson library.])])
 
-AC_CHECK_HEADERS(readline/readline.h, [],
+AC_CHECK_HEADERS([readline/readline.h], [],
                  [AC_MSG_ERROR([Unable to find GNU readline header files.])])
-AC_CHECK_LIB(readline, readline, [],
+AC_CHECK_LIB([readline], [readline], [AC_SUBST([READLINE_LIBS], [-lreadline])],
              [AC_MSG_ERROR([Unable to find the GNU readline library.])])
 
 AC_ARG_ENABLE([lttng],
@@ -56,7 +56,8 @@ AC_ARG_ENABLE([lttng],
 AM_CONDITIONAL([LTTNG], [test "x$enable_lttng" != "xno"])
 
 AS_IF([test "x$enable_lttng" != "xno"], [
-	AC_CHECK_LIB([lttng-ust], [main], [],
+	AC_CHECK_LIB([lttng-ust], [main],
+		     [AC_SUBST([LTTNG_LIBS], [-llttng-ust])],
 	             [AC_MSG_ERROR([Unable to find the lttng-ust library. Disable LTTng to avoid this dependency.])])
 ])
 

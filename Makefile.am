@@ -4,8 +4,6 @@ AM_CFLAGS = -Wall
 
 AM_CPPFLAGS = -I$(srcdir)/include -DSYSCONFDIR='"$(sysconfdir)"'
 
-AM_LDFLAGS = -Wl,--as-needed
-
 lib_LTLIBRARIES = libpaf.la
 
 include_HEADERS = include/paf.h include/paf_props.h include/paf_value.h \
@@ -32,14 +30,15 @@ libpaf_la_SOURCES = src/util.c src/epoll_reg.c src/ptimer.c src/log.c \
 	src/domain_conf.c src/paf.c
 
 libpaf_la_LDFLAGS = -Wl,--version-script=$(srcdir)/src/libpaf.vs \
-	-version-info $(PAF_VERSION_CURRENT):$(PAF_VERSION_REVISION):$(PAF_VERSION_AGE)
+	-version-info $(PAF_VERSION_CURRENT):$(PAF_VERSION_REVISION):$(PAF_VERSION_AGE) \
+	@XCM_LIBS@ @JANSSON_LIBS@
 libpaf_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)/src
 libpaf_la_CFLAGS = $(AM_CFLAGS) -Wextra
 
 if LTTNG
 libpaf_la_SOURCES += src/paf_lttng.c
 libpaf_la_CPPFLAGS += -DPAF_LTTNG
-libpaf_la_LDFLAGS += -llttng-ust
+libpaf_la_LDFLAGS += @LTTNG_LIBS@
 endif
 
 UTEST_SOURCES = test/utest/utest.c test/utest/utestreport.c \
@@ -63,12 +62,13 @@ paftest_SOURCES = $(PAFTEST_TESTCASE_SOURCES) $(UTEST_SOURCES) \
 	$(PAFTEST_UNITTEST_SOURCES)
 paftest_CPPFLAGS=$(AM_CPPFLAGS) $(TEST_CPPFLAGS)
 paftest_LDADD = libpaf.la
-paftest_LDFLAGS = -no-install
+paftest_LDFLAGS = @XCM_LIBS@ @JANSSON_LIBS@ -no-install
 
 lpafc_SOURCES = tools/lpafc/cmdline.c tools/lpafc/cli.c tools/lpafc/session.c \
 	tools/lpafc/main.c src/util.c src/proto_ta.c src/msg.c src/log.c \
 	src/conf.c src/conn.c
 lpafc_CFLAGS = $(AM_CFLAGS) -I$(srcdir)/src
+lpafc_LDFLAGS = @XCM_LIBS@ @JANSSON_LIBS@ @READLINE_LIBS@
 lpafc_LDADD = libpaf.la
 
 client_SOURCES = example/client.c
