@@ -4,6 +4,8 @@ AM_CFLAGS = -Wall
 
 AM_CPPFLAGS = -I$(srcdir)/include -DSYSCONFDIR='"$(sysconfdir)"'
 
+AM_LDFLAGS = -Wl,--as-needed
+
 lib_LTLIBRARIES = libpaf.la
 
 include_HEADERS = include/paf.h include/paf_props.h include/paf_value.h \
