@@ -98,7 +98,7 @@ static int teardown(unsigned setup_flags)
 #define MAX_PROCESS_CALLS (10000)
 
 static int wait_for_all(struct paf_context **contexts, size_t num_contexts,
-                        double duration)
+			double duration)
 {
     double now = ut_ftime(CLOCK_REALTIME);
     double deadline = now + duration;
@@ -1259,7 +1259,7 @@ static int test_detach(unsigned flags, size_t service_count)
         CHK(service_ids[i] >= 0);
     }
 
-    int hits = 0;
+    struct hits hits = {};
     CHKNOERR(paf_subscribe(context, NULL, count_match_cb, &hits));
 
     paf_props_destroy(props);
@@ -1267,7 +1267,8 @@ static int test_detach(unsigned flags, size_t service_count)
     if (with_server) {
         do {
             CHKNOERR(wait_for(context, 0.1));
-        } while (ts_assure_service_count(service_count) < 0 || hits != service_count);
+        } while (ts_assure_service_count(service_count) < 0 ||
+		 hits.appeared != service_count);
     }
 
     if (service_count > 0 && !manual_unpublish) {
