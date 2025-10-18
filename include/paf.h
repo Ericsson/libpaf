@@ -345,7 +345,7 @@ struct paf_context *paf_attach(const char *domain_name);
  * be deferred until the next, or some future, paf_process() call.
  *
  * @param[in] context A reference to the domain where the service should be published.
- * @param[in] props The properties of this service. Must be non-NULL, but may be an empty set.
+ * @param[in] props The properties of this service. Must be non-NULL, but may be an empty set. Ownership is retained by the caller, which may destroy the properties after the call has completed.
  *
  * @return Returns a unique id for this service on success, or < 0 or failure.
  *
@@ -374,7 +374,7 @@ int64_t paf_publish(struct paf_context *context, const struct paf_props *props);
  *
  * @param[in] context A reference to the service's domain.
  * @param[in] service_id The id of the service as returned by paf_publish().
- * @param[in] props The properties that should replace the service current properties.
+ * @param[in] props The properties that should replace the service current properties. Must be non-NULL, but may be an empty set. Ownership is retained by the caller, which may destroy the properties after the call has completed.
  *
  * @return Returns 0 on success, or < 0 or failure.
  *
