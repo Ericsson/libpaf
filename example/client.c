@@ -92,6 +92,8 @@ static void publish(const char *domain_name, const char **args, int num_args)
 
     int64_t service_id = paf_publish(context, props);
 
+    paf_props_destroy(props);
+
     assert(service_id >=0);
     printf("Service %"PRIx64" published.\n", service_id);
 
