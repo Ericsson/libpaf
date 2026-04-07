@@ -370,7 +370,7 @@ struct domain_conf *domain_conf_read(const char *domain,
 			    sizeof(domain_filename)) < 0)
 	goto out;
 
-    int domain_file = open(domain_filename, O_RDONLY);
+    int domain_file = open(domain_filename, O_RDONLY | O_CLOEXEC);
 
     if (domain_file < 0) {
 	log_domain_conf_read_error(log_ref, domain_filename, errno);

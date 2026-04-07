@@ -249,7 +249,7 @@ int ut_parse_uint63(const char *uint63_s, int base, int64_t *uint63)
 static int get_ns_fd(const char *ns) {
     char path[strlen(NETNS_NAME_DIR)+strlen(ns)+2];
     snprintf(path, sizeof(path), "%s/%s", NETNS_NAME_DIR, ns);
-    return open(path, O_RDONLY, 0);
+    return open(path, O_RDONLY | O_CLOEXEC, 0);
 }
 
 int ut_net_ns_enter(const char *ns_name)
@@ -260,7 +260,7 @@ int ut_net_ns_enter(const char *ns_name)
        be the current thread's ns */
     snprintf(old_ns, sizeof(old_ns), "/proc/%d/ns/net", ut_gettid());
 
-    int old_ns_fd = open(old_ns, O_RDONLY, 0);
+    int old_ns_fd = open(old_ns, O_RDONLY | O_CLOEXEC, 0);
     if (old_ns_fd < 0)
 	goto err;
 

@@ -30,7 +30,7 @@ static void tmo_destroy(struct tmo *tmo)
 struct ptimer *ptimer_create(clockid_t clk_id, int epoll_fd,
 			     const char *log_ref)
 {
-    int fd = timerfd_create(clk_id, TFD_NONBLOCK);
+    int fd = timerfd_create(clk_id, TFD_NONBLOCK | TFD_CLOEXEC);
 
     if (fd < 0) {
 	log_ptimer_timer_fd_creation_failed(log_ref, errno);

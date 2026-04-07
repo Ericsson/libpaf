@@ -172,7 +172,7 @@ struct paf_context *paf_attach(const char *domain)
     char *log_ref = ut_asprintf("client: %"PRIx64" domain: %s",
 				client_id, domain);
 
-    int epoll_fd = epoll_create1(0);
+    int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
     if (epoll_fd < 0)
         goto err_free_log_ref;
 
